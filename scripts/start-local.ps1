@@ -20,7 +20,7 @@ try {
 $staticPath = Join-Path $workspacePath 'backend/src/main/resources/static'
 New-Item -ItemType Directory -Force -Path $staticPath | Out-Null
 Copy-Item -Path (Join-Path $workspacePath 'frontend/dist/*') -Destination $staticPath -Recurse -Force
-mvn -f backend/pom.xml package
+mvn -f backend/pom.xml clean package
 if ($LASTEXITCODE -ne 0) { throw 'Backend tests or packaging failed' }
 $javaExecutable = if ($env:JAVA_HOME) { Join-Path $env:JAVA_HOME 'bin/java.exe' } else { 'java' }
 & $javaExecutable -jar backend/target/invoice-manager-1.0.0.jar --debug=false

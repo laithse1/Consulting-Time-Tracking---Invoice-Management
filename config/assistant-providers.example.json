@@ -1,0 +1,56 @@
+{
+  "providers": [
+    {
+      "id": "local-ollama",
+      "name": "Local Ollama",
+      "enabled": false,
+      "model": "YOUR_INSTALLED_MODEL",
+      "endpoint": "http://host.docker.internal:11434/api/chat",
+      "headers": {},
+      "request": {
+        "model": "{{model}}",
+        "stream": false,
+        "format": "json",
+        "messages": [
+          { "role": "system", "content": "{{instructions}}" },
+          { "role": "user", "content": "{{input}}" }
+        ]
+      },
+      "responsePointer": "/message/content"
+    },
+    {
+      "id": "http-chat",
+      "name": "HTTP chat provider",
+      "enabled": false,
+      "model": "YOUR_MODEL",
+      "endpoint": "https://YOUR_PROVIDER/v1/chat/completions",
+      "credentials": { "API_KEY": "" },
+      "headers": { "Authorization": "Bearer {{secret:API_KEY}}" },
+      "request": {
+        "model": "{{model}}",
+        "messages": [
+          { "role": "system", "content": "{{instructions}}" },
+          { "role": "user", "content": "{{input}}" }
+        ],
+        "stream": false
+      },
+      "responsePointer": "/choices/0/message/content"
+    },
+    {
+      "id": "messages-api",
+      "name": "Messages provider",
+      "enabled": false,
+      "model": "YOUR_MODEL",
+      "endpoint": "https://api.anthropic.com/v1/messages",
+      "credentials": { "API_KEY": "" },
+      "headers": { "x-api-key": "{{secret:API_KEY}}", "anthropic-version": "2023-06-01" },
+      "request": {
+        "model": "{{model}}",
+        "max_tokens": 4096,
+        "system": "{{instructions}}",
+        "messages": [{ "role": "user", "content": "{{input}}" }]
+      },
+      "responsePointer": "/content/0/text"
+    }
+  ]
+}

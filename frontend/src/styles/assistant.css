@@ -1,0 +1,118 @@
+.assistant-layout {
+  display: grid;
+  gap: 24px;
+  max-width: 1050px;
+}
+.assistant-composer textarea {
+  width: 100%;
+  line-height: 1.7;
+  min-height: 200px;
+}
+.assistant-layout .field {
+  display: grid;
+  gap: 7px;
+  font-size: 13px;
+  margin: 12px 0;
+}
+.assistant-layout .form-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 0 18px;
+}
+.assistant-layout .field select {
+  max-width: none;
+  width: 100%;
+}
+.assistant-layout .button {
+  display: inline-flex;
+  gap: 8px;
+  align-items: center;
+}
+.assistant-check {
+  display: flex;
+  align-items: flex-start;
+  gap: 9px;
+  font-size: 13px;
+  line-height: 1.6;
+  margin: 16px 0;
+}
+.assistant-check input {
+  margin-top: 4px;
+  flex-shrink: 0;
+}
+.assistant-action {
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  padding: 18px;
+  margin: 18px 0;
+  background: var(--bg);
+}
+.assistant-action h3 {
+  margin-top: 0;
+}
+.assistant-action fieldset {
+  border: 0;
+  padding: 0;
+  margin: 0;
+  min-width: 0;
+}
+.assistant-questions {
+  color: var(--muted);
+  font-size: 12px;
+  line-height: 1.7;
+  padding-left: 18px;
+  margin: 15px 0 0;
+}
+.assistant-help {
+  margin-top: 24px;
+  font-size: 13px;
+  color: var(--muted);
+}
+.assistant-help summary,
+.assistant-plan summary {
+  cursor: pointer;
+}
+.assistant-result {
+  border-top: 1px solid var(--line);
+  padding: 20px 0;
+}
+.assistant-result textarea {
+  width: 100%;
+}
+.assistant-history {
+  display: grid;
+  gap: 8px;
+  margin-top: 18px;
+}
+.assistant-history-item {
+  display: grid;
+  gap: 6px;
+  text-align: left;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  padding: 14px;
+  color: var(--ink);
+  background: var(--bg);
+  overflow-wrap: anywhere;
+}
+.assistant-history-item.selected {
+  border-color: var(--green);
+}
+.assistant-history-item small {
+  color: var(--muted);
+}
+.assistant-original {
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  font: inherit;
+  padding: 15px;
+  background: var(--bg);
+}
+@media (max-width: 600px) {
+  .assistant-layout .form-grid {
+    grid-template-columns: 1fr;
+  }
+  .assistant-action {
+    padding: 12px;
+  }
+}

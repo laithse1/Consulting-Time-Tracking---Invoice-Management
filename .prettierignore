@@ -1,0 +1,15 @@
+.git/
+.env
+config/assistant-providers.json
+**/node_modules/
+**/target/
+**/dist/
+backend/src/main/resources/static/
+backend/src/main/resources/db/migration/
+data/
+backups/
+tmp/
+**/package-lock.json
+**/*.tsbuildinfo
+**/*.png
+**/*.pdf

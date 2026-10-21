@@ -1,26 +1,48 @@
-# Verification
+# Verification record
 
-Validated on Windows on October 19, 2026, using Maven 3.9.9 with Java 21 and Node 22.23.2.
+## Structured application release
 
-## Automated checks
+The refactored release was built and tested locally on Windows and in the Linux Docker build. The running local app is at **http://127.0.0.1:18080**. Port 8080 is unavailable on this workstation; the private root `.env` selects 18080.
 
-- Backend: 16 passing JUnit/Mockito tests (13 domain/integration tests against migrated SQLite and 3 HTTP/authentication tests).
-- Frontend: 5 passing Vitest/React Testing Library tests; strict TypeScript compilation and production Vite build pass. A late authorized network response cannot reopen a locked workspace.
-- Headless Chrome: full workflow passed against disposable SQLite databases in both native Java and the final Docker runtime. Covered token login, seven incomplete seed activities, manual actual work, weekly review, draft creation, explicit finalization, PDF/XLSX/CSV exports, edited email and CC copying, actual submission date, approval, partial payment, historical-payment isolation, dark theme and mobile layout. No browser JavaScript errors or document-level horizontal overflow.
-- SQLite online backup: generated a backup from the isolated test database and passed `PRAGMA integrity_check`.
-- Docker Compose: image built, backend tests passed during the Linux image build, and the application started successfully. The live deployment at `http://127.0.0.1:18080` passed authenticated API, anonymous-access rejection, seed integrity and OpenAPI checks. Port 8080 was blocked by Windows, so the ignored local `.env` selects port 18080. The runtime uses Ubuntu Temurin Java 21 and an executable temporary filesystem for SQLite JDBC's extracted native library. The application root filesystem remains read-only and its service runs as UID 10001 with all capabilities dropped.
-- npm dependency audit: zero advisories after test-dependency updates, including zero in production dependencies. This is not a claim that every dependency is free of undiscovered vulnerabilities.
+| Check                      | Executed result                                                                                                                                                                                                  |
+| -------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Backend build/tests        | 39 passing tests; 1 optional PDF sample generator skipped. Docker image build succeeded.                                                                                                                         |
+| Ledger/service integration | 13 passing tests for money, eligibility, snapshots, allocations, corrections, expenses, payments, timer behavior, and contract review.                                                                           |
+| Assistant integration      | 9 passing tests for explicit facts, missing/ambiguous facts, saved drafts, confirmation/version checks, atomic rollback, reports, and retry/duplicate protection.                                                |
+| HTTP/authentication        | 9 passing MockMvc tests for bearer access, explicit confirmation, typed request validation/mapping, structured-field rejection, origin allowlists, malformed assistant actions, and fractional-second rejection. |
+| Runtime configuration      | 4 passing tests for overrides, token constraints, resource bounds, timeouts, and secret redaction.                                                                                                               |
+| Package boundaries         | 3 passing checks for controller/persistence separation, repository/service separation, and framework-independent domain code.                                                                                    |
+| Provider adapter           | 1 passing local-fixture test for credential handling, live config reload/disable, verbatim coverage, and rejection of invented/omitted source/signs.                                                             |
+| Frontend                   | 7 passing Vitest/Testing Library tests. Strict TypeScript, unused-variable/parameter checks, and production build pass.                                                                                          |
+| Formatting                 | Repository Prettier check passes for application source, public JSON/YAML, workflows, Markdown, and browser scripts. Applied migrations/private files are excluded.                                              |
+| Financial browser workflow | Passed in headless Chrome against a disposable container/database.                                                                                                                                               |
+| Assistant browser workflow | Passed in headless Chrome against a separate disposable container/database.                                                                                                                                      |
+| Local database             | Integrity check returned `ok`; business-data fingerprints matched before and after deployment.                                                                                                                   |
 
-## Financial edge cases
+The GitHub Actions CI workflow is configured to run formatting, types, frontend tests/build, Maven verification, and both browser workflows. It was not executed remotely in this session. The optional Pages workflow was prepared earlier and remains manually triggered; nothing was published.
 
-Incomplete seed activities cannot be billed. Overlaps and duplicate work are rejected. Weeks crossing a month boundary include all dated work for compliance, while invoice contents stay inside the service period. Partial contract weeks require clarification. Unapproved overtime blocks finalization. Availability/exception acknowledgements never create invoice charges. Adjustments require separate documentation and approval. Unapproved expenses block finalization and may be corrected before allocation. Issued entries and expenses remain locked while allocated to a live invoice. Explicit confirmed withdrawal of an unpaid invoice preserves its snapshot and releases source records for audited correction. Existing allocations prevent double billing. Linked replacement invoices preserve original snapshots and identify the withdrawn invoice in their exports. Snapshot monetary values deserialize as BigDecimal, preserving exact decimal arithmetic. Payments cannot exceed balances; overdue and paid states derive from submission dates and payment events. Long abandoned timers can be stopped without creating false confirmed durations.
+## Browser coverage
+
+The financial workflow covered token login, incomplete seeds, actual work entry, weekly review dialogs, invoice drafting/finalization, withdrawal/correction/linked replacement, PDF/XLSX/CSV downloads, edited submission text and CC copying, actual submission date, approval, partial payment, historical-receipt isolation, dark theme, and mobile layout.
+
+The assistant workflow covered autosaved notes, local parsing, editable review fields, explicit confirmation, a batch producing 2.5 hours and a $187.50 invoice draft/report, idempotent application, reload recovery, invoice review, start/pause/resume/stop timer commands, draft creation on stop, allowed-origin preflight, rejection of an untrusted origin, and mobile layout. No browser JavaScript errors or document-level horizontal overflow were observed.
+
+All financial/browser fixtures used the fixed isolated test credential and temporary SQLite files. No synthetic work, invoices, or payment events were added to the live database.
+
+## Persistence and migration evidence
+
+Before replacing the running service, it was cleanly stopped and backed up to a timestamped file under ignored `backups/`. A fingerprint was recorded for clients, contracts, projects, entries, weekly reviews, expenses, invoices, payments, historical records, audit records, assistant drafts, and assistant plans.
+
+After deployment, authenticated `/api/state` and `/api/assistant` returned 200; anonymous API access returned 401. SQLite integrity remained `ok`, and the complete business-data fingerprint was unchanged. The live workspace retained its seven original draft entries and existing client/contract/project/history records, with zero test invoices/payments/plans added by verification.
+
+Both applied Flyway SQL files were compared byte for byte against the source baseline and remained unchanged. This refactor required no schema migration. The original source baseline and superseded implementations were retained under ignored `tmp/` for recovery; database backups and the earlier named volume remain separate from those source archives.
 
 ## Visual review
 
-The zero-value seeded September draft PDF was rendered with Poppler and visually inspected. It contains no invented work. Desktop light/dark and 390px mobile layouts were inspected. `dashboard.png` shows only the initial, unconfirmed seed state. Temporary test work and payment fixtures remain solely in disposable databases under ignored `tmp/`.
+Five documentation screenshots were captured from the isolated assistant demonstration database and inspected: dashboard, assistant review, invoice preview, dark dashboard, and 390-pixel mobile dashboard. README images are under `docs/images/`. The wider invoice framing preserves readable category/hour columns. The earlier zero-value sample invoice PDF remains a draft with no invented work; export generation is covered by the ledger and browser checks.
 
-## Scope and operating constraints
+## Scope and maintenance
 
-Single-user local deployment with a bearer token; no multi-user identity/roles. References/attachment URLs are supported, binary uploads are not. Email is manual. Credit notes/refunds and replacing paid invoices are not implemented. PostgreSQL is a documented migration path, not a switchable database. The application uses USD. PDF presentation currently uses PDF standard fonts and is designed for Latin/ASCII content; use the full Unicode CSV/XLSX export for text outside that font repertoire.
+The product remains a local single-user application with a bearer token. It supports reference URLs rather than binary attachment uploads. Email sending, multi-user identity/roles, credit/refund accounting, and selectable PostgreSQL storage are outside this release. Provider tests used a local HTTP fixture; no paid account or live cloud inference was used.
 
-The requested Spring Boot 3.x line is pinned to 3.5.16, its [final open-source maintenance release](https://spring.io/blog/2026/06/25/spring-boot-3-5-16-available-now/). Keeping a supported framework line will require a future Spring Boot 4 migration or commercial 3.x maintenance. No such migration is included because the requested stack specifies 3.x.
+The requested Spring Boot 3.x stack is pinned to 3.5.16, its [final open-source maintenance release](https://spring.io/blog/2026/06/25/spring-boot-3-5-16-available-now/). A supported-line upgrade or commercial maintenance remains a future lifecycle decision. PDF rendering uses standard PDF fonts; CSV/XLSX remain the full-Unicode export options for text outside that font repertoire.

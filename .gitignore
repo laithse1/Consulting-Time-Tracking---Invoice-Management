@@ -3,6 +3,8 @@ target/
 dist/
 data/
 .env
+**/.env
+**/.env.local
 *.db*
 *.log
 !docs/sample-invoice.pdf
@@ -13,3 +15,4 @@ test-results/
 playwright-report/
 tmp/
 .vscode/
+config/assistant-providers.json

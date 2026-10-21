@@ -6,7 +6,12 @@
   "scripts": {
     "dev": "node node_modules/vite/bin/vite.js --host 127.0.0.1",
     "build": "node node_modules/typescript/bin/tsc -b && node node_modules/vite/bin/vite.js build",
-    "test": "node node_modules/vitest/vitest.mjs run"
+    "test": "node node_modules/vitest/vitest.mjs run",
+    "typecheck": "node node_modules/typescript/bin/tsc --noEmit -p tsconfig.json",
+    "format": "node node_modules/prettier/bin/prettier.cjs --ignore-path ../.prettierignore --write \"src/**/*.{ts,tsx,css}\" \"e2e/**/*.mjs\" \"*.json\" \"*.ts\" \"../backend/src/**/*.java\" \"../backend/src/**/*.yml\" \"../*.{md,json,yml,yaml}\" \"../.prettierrc.json\" \"../docs/*.md\" \"../config/*.example.json\" \"../.github/**/*.yml\"",
+    "format:check": "node node_modules/prettier/bin/prettier.cjs --ignore-path ../.prettierignore --check \"src/**/*.{ts,tsx,css}\" \"e2e/**/*.mjs\" \"*.json\" \"*.ts\" \"../backend/src/**/*.java\" \"../backend/src/**/*.yml\" \"../*.{md,json,yml,yaml}\" \"../.prettierrc.json\" \"../docs/*.md\" \"../config/*.example.json\" \"../.github/**/*.yml\"",
+    "e2e:smoke": "node e2e/smoke.mjs",
+    "e2e:assistant": "node e2e/assistant.mjs"
   },
   "dependencies": {
     "@radix-ui/react-dialog": "^1.1.15",
@@ -21,6 +26,7 @@
     "@testing-library/dom": "^10.4.2",
     "@testing-library/jest-dom": "^6.9.1",
     "@testing-library/react": "^16.3.0",
+    "@types/node": "^22.20.5",
     "@types/react": "^19.1.16",
     "@types/react-dom": "^19.1.9",
     "@vitejs/plugin-react": "^5.0.4",

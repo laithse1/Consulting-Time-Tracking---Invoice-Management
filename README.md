@@ -1,84 +1,356 @@
 # Consulting Invoice Manager
 
-Self-hosted single-user time tracking, weekly contract review, immutable invoices, manual submission, and payment tracking. React + TypeScript + Vite + Tailwind + Radix UI, Java 21 / Spring Boot 3, SQLite / Flyway, PDFBox and Apache POI.
+**Your work, accounted for.** A self-hosted workspace for consulting time, contractual review, invoices, payments, and reporting—with an assistant that turns descriptions of completed work into a reviewable action plan.
 
-## Run with Docker
+![Java 21](https://img.shields.io/badge/Java-21-007396)
+![Spring Boot 3.5](https://img.shields.io/badge/Spring_Boot-3.5-6DB33F)
+![React 19](https://img.shields.io/badge/React-19-149ECA)
+![TypeScript](https://img.shields.io/badge/TypeScript-5.9-3178C6)
+![Storage](https://img.shields.io/badge/Storage-local_SQLite-003B57)
 
-1. Copy `.env.example` to `.env`. Set `APP_TOKEN` to a random secret of at least 24 characters (for example generate 32 random bytes with your password manager). Never commit this file.
-2. Start Docker Desktop, then run `docker compose up --build -d`.
-3. Open http://127.0.0.1:8080 (or the `APP_PORT` set in `.env`) and enter that token. Lock the workspace when finished. On this workstation the verified deployment uses http://127.0.0.1:18080 because Windows blocks port 8080.
+Describe your work, review the facts, and apply a plan that logs time, controls timers, prepares invoice drafts, and generates reports. Local rules work without an LLM. Optional provider profiles extend extraction through a private server-side configuration file. Your records stay in a database on your own disk.
 
-The database persists in the `consulting-data` named volume. `docker compose down` preserves it; do not use `down -v` unless you intend to destroy the database. No mail server, cloud service, or GitHub integration is required. Only localhost is published. This is a single-user application: do not expose it publicly without a TLS reverse proxy, individual authentication, and an appropriate access policy.
+Designed for a **single-user consulting workflow**. Financial approvals stay explicit: the system does not invent hours, authorize contractual adjustments, record assumed payments, or send email.
 
-## Run natively on Windows
+![Workspace dashboard](docs/images/dashboard.png)
 
-Install Java 21+, Maven 3.9+, Node 22.12+ and npm. From the repository root:
+## Explore
+
+[Features](#features) · [Quick start](#quick-start) · [Architecture](#architecture) · [Workflows](#workflows) · [Configuration](#configuration) · [Development](#development) · [Data and operations](#data-and-operations) · [Hosting](#hosting)
+
+## Features
+
+| Workspace           | What it does                                                                                                                                             |
+| ------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Work Assistant      | Saves unfinished notes; extracts work facts; presents editable, versioned plans; applies reviewed actions atomically; retains receipts for safe retries. |
+| Time Tracker        | Tracks one running/paused timer; records actual durations; keeps incomplete or estimated activities as drafts.                                           |
+| Timesheets          | Reviews full contractual weeks, including month boundaries; records availability, written exceptions, and overtime references.                           |
+| Clients & Contracts | Manages clients, projects, repositories, hourly rates, weekly expectations, payment terms, and payment instructions.                                     |
+| Invoices            | Prepares dated itemized/grouped drafts; validates eligibility; freezes issued snapshots; exports PDF, Excel, and CSV.                                    |
+| Corrections         | Withdraws an unpaid issued invoice with a reason, releases its source records for correction, and links the replacement while preserving history.        |
+| Payments            | Appends actual receipts; calculates balances, partial payment, due dates, and overdue status; separates historical prior-work receipts.                  |
+| Reports             | Shows confirmed actual and billable time, project breakdowns, and services value.                                                                        |
+| Local storage       | Persists financial records, timer state, notes, plans, snapshots, and audit history in SQLite; includes verified backup tooling.                         |
+
+### System views
+
+Screenshots use an isolated demonstration database, not the live financial database.
+
+| Describe and review work                     | Review an invoice                          |
+| -------------------------------------------- | ------------------------------------------ |
+| ![Work Assistant](docs/images/assistant.png) | ![Invoice review](docs/images/invoice.png) |
+
+<details>
+<summary>Dark theme and mobile layout</summary>
+
+![Dark workspace](docs/images/dashboard-dark.png)
+
+<img src="docs/images/mobile.png" alt="Mobile workspace" width="360" />
+
+</details>
+
+## Quick start
+
+### Docker Desktop
+
+Prerequisites: Docker Desktop with Linux containers and Docker Compose.
+
+1. Copy `.env.example` to `.env`.
+2. Replace `APP_TOKEN` with a private random secret of at least 24 characters. A password manager can generate it. Never commit this file.
+3. Start the application:
+
+```bash
+docker compose up --build -d
+```
+
+4. Open **http://127.0.0.1:8080** and enter your token. If that port is unavailable, change `APP_PORT` in `.env` and recreate the service. This workstation uses **http://127.0.0.1:18080**.
+
+```bash
+docker compose logs -f app
+docker compose stop app
+docker compose up -d
+```
+
+Compose publishes only localhost. The database is bind-mounted at `data/consulting.db`; recreating the container preserves it. The provider directory is mounted read-only. No AI credentials, mail service, or cloud account are needed to use the local workflow.
+
+### Native Windows installation
+
+Install Java 21+, Maven 3.9+, Node.js 22.12+, npm, and PowerShell 7+. From the repository root:
 
 ```powershell
 $env:JAVA_HOME = 'C:\Program Files\Java\jdk-21' # adapt to your installation
-$env:APP_TOKEN = '<your randomly generated access token>'
+$env:APP_TOKEN = '<your private random secret>'
 ./scripts/start-local.ps1
 ```
 
-The script builds the frontend, copies its assets into Spring Boot, runs backend tests and starts the app at http://127.0.0.1:8080. Data is under `./data/consulting.db`. If no token is supplied, the script generates and displays a session token. Keep it private. Use PowerShell 7+ for the script, or build manually as below.
+The script builds the frontend, packages and tests the backend, then starts the application. If `APP_TOKEN` is omitted, it generates and displays a private session token. The packaged application uses the root `data/consulting.db` by default.
 
-Development: run `mvn -f backend/pom.xml spring-boot:run` with APP_TOKEN set; separately run `npm ci` and `npm run dev` in `frontend`. Vite at http://127.0.0.1:5173 proxies `/api` to port 8080. Use the same token. The API fails startup if the token is missing or too short.
+## Architecture
 
-## First invoice
+The application is a modular monolith: one Java process, one transactional database, and a React frontend. Feature services own business rules; repositories own SQL; controllers adapt HTTP requests. The assistant and exports reuse the same application services as the manual workflow.
 
-1. Select the XR Navigation contract and September 2026 in the month selector.
-2. Review the seven seeded activities under Time Tracker. Enter actual work dates, local start times and confirmed durations. The two approximate meeting estimates are notes only; no hours have been assumed. Set each completed activity to **Confirmed actual work**.
-3. Under Timesheets review each weekly shortfall, availability, partial contract week, exception and overtime approval. A planning acknowledgement resolves an assignment discrepancy without creating billable time. Overtime requires a written approval or exception reference.
-4. Under Invoices, record any pre-approved expenses, then create an invoice for September 1â€“30. Only eligible confirmed billable work and period expenses are selected. Review the warnings and dated work detail. A contractual-minimum adjustment is optional and must carry its own amount, documented reason and manual approval reference.
-5. Preview/download PDF, Excel or CSV. Confirm finalization to lock a snapshot. Prepare and copy the submission email, attach the PDF in your email app, send it yourself and record the actual submission/receipt date. Optional CC addresses must be entered; no Brandon address is invented.
-6. Record approval, disputes and actual partial/full payments. Balance, due date and overdue state are calculated. Repeat for October with the existing contract and projects.
+```mermaid
+flowchart LR
+    User[Consultant] --> UI[React workspace]
+    UI --> Auth[Bearer token and origin checks]
+    Auth --> API[Feature controllers and request DTOs]
+    API --> Services[Application and feature services]
+    Services --> Domain[Domain validation and exact arithmetic]
+    Services --> Repos[JDBC repositories]
+    Repos --> DB[(SQLite)]
+    DB --- Disk[Local data/consulting.db]
+    Services --> Exports[PDF / Excel / CSV]
+    Services --> Parser[Deterministic work parser]
+    Services -. Explicit opt-in .-> Adapter[HTTP JSON provider adapter]
+    Config[Environment + YAML + private provider profiles] --> Services
+    Config --> Adapter
+    Adapter -. HTTPS or local inference .-> Provider[Optional model provider]
+```
 
-The historical $4,000 prior-work payment is a separate, initially unconfirmed record under Payments. It never enters recurring invoices or recurring revenue totals.
+### Technology stack
 
-## Billing rules and corrections
+| Layer        | Technology                                                   | Responsibility                                                            |
+| ------------ | ------------------------------------------------------------ | ------------------------------------------------------------------------- |
+| Frontend     | React 19, TypeScript, Vite 7                                 | Workspace, feature screens, state coordination, API transport             |
+| UI           | Tailwind CSS 4, Radix Dialog, Lucide                         | Styling, accessible dialog primitives, icons, responsive layouts          |
+| Backend      | Java 21, Spring Boot 3.5, Spring MVC, Bean Validation        | REST adapters, typed configuration, service transactions, validation      |
+| Persistence  | Spring JDBC, SQLite, Flyway                                  | Explicit repositories, versioned schema, immutable snapshots, audit trail |
+| Documents    | PDFBox, Apache POI                                           | Paginated invoices, workbooks, CSV exports                                |
+| Verification | JUnit, Mockito, MockMvc, Vitest, Testing Library, Playwright | Domain, configuration, architecture, HTTP, UI, and browser workflows      |
+| Delivery     | Multi-stage Docker build, Docker Compose, GitHub Actions     | Build verification, local runtime, optional static frontend deployment    |
 
-Durations are integer seconds, hours are displayed as decimal hours, and each work line is calculated as `seconds Ã— rate Ã· 3600`, rounded half-up to cents with `BigDecimal`. Totals add the rounded lines, expenses and explicitly approved adjustments. USD is the supported currency. Date-only values are ISO local dates; timer timestamps and audit times use UTC. Timer stop saves a draft: verify its local date/start time and split any work crossing midnight before confirmation.
+Dependency versions are pinned by `backend/pom.xml` and `frontend/package-lock.json`. The application currently uses USD and cent-level, half-up rounding per work line. Decimal snapshot values are reloaded as `BigDecimal`.
 
-The configurable week start applies to whole-week compliance, including entries in adjacent months. Invoice service periods include only work dated inside that period. Partial contract weeks retain the minimum (no invented proration) and require clarification. Assignment shortfalls never produce work or automatic charges. References and attachments are stored as text/URLs; binary file upload is not supported.
+### Repository layout
 
-Finalized invoice snapshots are immutable. To correct an unpaid issued invoice, choose **Withdraw unpaid invoice for correction**, document the reason and explicitly confirm. The original snapshot is retained with a zero active balance; its source work and expenses are released for editing. Correct them, return to the withdrawn invoice, and choose **Create documented replacement**. Finalizing the replacement marks the original Replaced and allocates the corrected contents transactionally. Notify accounting manually that the original was withdrawn if it was already submitted. Invoices with payment events cannot be withdrawn or replaced, because this release does not implement credit notes/refunds. Resolve those cases through your accounting process; do not erase payments. Payment and financial audit records are append-only.
+```text
+backend/
+  src/main/java/io/consulting/
+    config/          # Validated runtime settings and OpenAPI configuration
+    controller/      # Feature-oriented HTTP adapters
+    domain/          # Framework-independent values, periods, and work parsing
+    dto/             # Typed HTTP requests and error envelopes
+    exception/       # Central HTTP error translation
+    integration/ai/  # Optional HTTP JSON provider adapter
+    repository/      # Parameterized JDBC queries and persistence
+    security/        # Bearer token and configured-origin checks
+    service/         # Clients, time, compliance, invoices, expenses, payments
+      assistant/     # Versioned plans and atomic orchestration
+      export/        # PDF, Excel, and CSV generation
+    support/         # Decimal-safe JSON and request mapping
+    validation/      # Bounded request bodies
+  src/main/resources/
+    application.yml  # Environment-backed runtime defaults
+    db/migration/    # Applied Flyway migrations: never edit in place
+  src/test/java/     # Feature, HTTP, configuration, and architecture checks
+frontend/
+  src/
+    app/             # Workspace composition, navigation, and context
+    components/      # Shared UI controls and tables
+    config/          # Public frontend configuration
+    features/        # Pages, dialogs, and assistant views by feature
+    hooks/           # Workspace loading and mutation coordination
+    lib/             # API transport, forms, dates, money, and time helpers
+  e2e/               # Isolated browser workflows and screenshot tooling
+config/              # Public provider template and ignored private profiles
+scripts/             # Local startup and consistent database backups
+docs/                # Design, development, configuration, API, verification, images
+.github/workflows/   # CI and optional manually triggered Pages deployment
+```
 
-## Tests and builds
+There is no JPA entity layer: this SQLite implementation uses explicit JDBC projections and Flyway-owned schema. Request DTOs define the HTTP boundary; service validation owns billing decisions. See [architecture decisions](docs/architecture.md) for transaction and dependency boundaries.
+
+## Workflows
+
+### Describe completed work
+
+Open **Work Assistant**, select the active contract, and enter one task or command per line:
+
+```text
+2026-09-15: Spent 2h refactoring geospatial-mcp-server, PR #42.
+2026-09-16: Spent 30m documenting Audiom.
+Draft invoice September 2026
+Generate report September 2026
+```
+
+Review dates, project assignment, categories, billing flags, and actual durations. Apply the plan once. This example produces 2.5 actual hours, an invoice draft from eligible unbilled work, and a report. An invoice draft still needs contractual review and finalization.
+
+The parser accepts ISO dates, named dates, “today”/“yesterday”, numeric durations such as `1h 30m`, and clock ranges such as `09:00–11:00`. Missing facts and estimates stay draft. Duration-only entries retain no invented clock start; clock overlaps can only be checked when times are supplied.
+
+```mermaid
+sequenceDiagram
+    actor User as Consultant
+    participant UI as Work Assistant
+    participant API as Assistant controller
+    participant Service as Assistant service
+    participant Parser as Local parser / optional provider
+    participant Ledger as Feature services
+    participant DB as SQLite
+    User->>UI: Describe completed work
+    UI->>API: Save unfinished notes
+    API->>DB: Persist composer draft
+    User->>UI: Review action plan
+    UI->>API: Propose plan with reference date
+    API->>Service: Parse saved source
+    Service->>Parser: Extract explicit work facts
+    Parser-->>Service: Facts and unresolved questions
+    Service->>DB: Store proposed plan and version
+    Service-->>UI: Editable action plan
+    User->>UI: Correct facts and confirm
+    UI->>API: Save reviewed version; apply confirmed plan
+    API->>Service: Begin transaction
+    loop Actions in reviewed order
+        Service->>Ledger: Validate and execute action
+        Ledger->>DB: Save work / timer / draft / report data
+    end
+    Service->>DB: Save applied receipt and commit
+    Service-->>UI: Persistent results
+    Note over Service,DB: Failure rolls back the batch; retrying an applied plan returns its saved receipt
+```
+
+See [assistant grammar and provider setup](docs/work-assistant.md) for timer commands, compliance review, and submission-email preparation.
+
+### From actual work to payment
+
+1. Log actual work, or stop a timer and verify the resulting draft.
+2. Review weekly availability, shortfalls, partial weeks, and written overtime/exception references.
+3. Create an invoice draft for the service period. Only eligible confirmed billable work and period expenses are selected.
+4. Resolve validation warnings; explicitly finalize to freeze the invoice and allocate its source records.
+5. Download the PDF/workbook/CSV. Prepare the email, attach the PDF, and send it in your mail application.
+6. Record the actual submission/receipt date, review status, and actual payments.
+
+```mermaid
+sequenceDiagram
+    actor User as Consultant
+    participant UI as Invoice workspace
+    participant Service as Invoice service
+    participant DB as SQLite
+    participant Export as Export service
+    User->>UI: Prepare invoice for a period
+    UI->>Service: Create draft and preview
+    Service->>DB: Read eligible work, expenses, contract, weekly reviews
+    Service-->>UI: Exact totals and validation warnings
+    User->>UI: Resolve warnings; confirm finalization
+    UI->>Service: Finalize confirmed invoice
+    Service->>DB: Atomically freeze snapshot and allocate sources
+    User->>UI: Download invoice
+    UI->>Export: Render frozen snapshot
+    Export-->>User: PDF / Excel / CSV
+    Note over User,UI: Consultant sends the email outside the application
+    User->>UI: Record actual submission and payments
+    UI->>Service: Validate dates, amount, and references
+    Service->>DB: Append payment / update workflow metadata
+    Service-->>UI: Current balance and derived status
+```
+
+Shortfalls never manufacture time. Minimum-charge adjustments require their own reason and explicit approval reference. Issued snapshots remain unchanged. An unpaid invoice can be withdrawn for a documented correction and replaced; invoices with payment events require an accounting credit/refund process, which is outside this release.
+
+### Initial workspace data
+
+The database seeds one consulting contract, three projects, and seven incomplete activities. Their dates and durations must be confirmed before billing. The historical $4,000 prior-work receipt is separate and initially unconfirmed; it never enters recurring invoice totals. No payment credentials are seeded.
+
+## Configuration
+
+| Configuration                           | Location                                          | When changes apply                                                          |
+| --------------------------------------- | ------------------------------------------------- | --------------------------------------------------------------------------- |
+| Runtime settings and defaults           | `backend/src/main/resources/application.yml`      | Backend restart; environment variables override defaults                    |
+| Docker settings                         | Root `.env`, based on `.env.example`              | Recreate the Compose service; rebuild for public frontend build settings    |
+| Contract and billing terms              | Clients & Contracts in the application            | Persisted in SQLite; issued snapshots retain their original terms           |
+| Optional model profiles and credentials | `config/assistant-providers.json`                 | Read on each request; reload the assistant selector after changing profiles |
+| Public frontend settings                | `frontend/.env`, based on `frontend/.env.example` | Restart Vite or rebuild the frontend                                        |
+
+Common runtime settings include `APP_TOKEN`, `APP_PORT`, `DATA_DIR`, `APP_ALLOWED_ORIGINS`, `INVOICE_NUMBER_PREFIX`, assistant resource/history limits, provider timeouts, and response-size limits. Configuration is validated at startup. Currency arithmetic, immutable snapshots, and explicit financial confirmation are business invariants rather than configurable bypasses.
+
+**Provider credentials belong on the backend.** The example file includes disabled local Ollama, chat-completion JSON, and messages-style profiles. New compatible HTTP JSON APIs can be added without rebuilding. Streaming, OAuth refresh, custom signing, and non-JSON protocols require adapter work. No provider is enabled by default, and every provider-assisted description requires consent.
+
+See the [complete configuration reference](docs/configuration.md). Never put secrets in `VITE_*` settings: they are public build output.
+
+## Development
+
+Prerequisites: Java 21+, Maven 3.9+, Node.js 22.12+, npm, and Chrome for the browser scripts.
+
+### Two-process development
+
+In terminal 1, from the repository root:
 
 ```powershell
-mvn -f backend/pom.xml test
+$env:APP_TOKEN = '<private development token of at least 24 characters>'
+$env:DB_PATH = Join-Path (Get-Location) 'tmp/development.db'
+New-Item -ItemType Directory -Force tmp | Out-Null
+mvn -f backend/pom.xml spring-boot:run
+```
+
+Use a separate development database. In terminal 2:
+
+```bash
 cd frontend
 npm ci
-npm test
-npm run build
+npm run dev
 ```
 
-For the complete browser workflow, first build the packaged application with `scripts/start-local.ps1` (stop it before rebuilding), then run `node e2e/smoke.mjs` from `frontend` with `JAVA_HOME` set and Chrome installed. This starts its own server on port 18081 with a fresh disposable database and closes it after testing. It never adds test work to your normal database. You can build without starting by running the commands in that script through the Maven package step.
+Open http://127.0.0.1:5173. Vite proxies `/api` to the backend on port 8080. Adjust `VITE_DEV_API_TARGET` if needed. Use the backend token to unlock the workspace.
 
-JUnit integration tests use isolated in-memory SQLite with the real migrations. They cover incomplete seeds, overlaps/duplicates, partial weeks, month boundaries, overtime, adjustments, expenses, double billing, immutable snapshots, replacement, timer concurrency and payment arithmetic. Frontend tests use Vitest and React Testing Library. PDF and XLSX exports are exercised by backend tests. See `docs/verification.md` for actual execution results and environment limitations.
+### Quality checks
 
-## Backups and restore
+```bash
+mvn -f backend/pom.xml clean verify
+npm --prefix frontend ci
+npm --prefix frontend run format:check
+npm --prefix frontend run typecheck
+npm --prefix frontend test
+npm --prefix frontend run build
+```
 
-Protect backups like financial records. Native installs can use `./scripts/backup.ps1 -Database ./data/consulting.db -Destination ./backups` (Python 3 required); it uses SQLite's online backup API and verifies integrity. Store encrypted copies outside this machine. Test a restore periodically.
+Run `npm --prefix frontend run format` to apply repository formatting. Java uses four-space indentation; TypeScript, JSON, YAML, and CSS use two. `.editorconfig`, Prettier configuration, strict TypeScript, lockfiles, and CI keep these conventions repeatable. Formatting excludes applied migrations, credentials, databases, backups, generated assets, and dependencies.
 
-For Docker, stop writes for a simple consistent file backup:
+Backend checks cover ledger arithmetic, snapshots, corrections, overlap/duplicate protection, assistant atomicity and retries, provider source validation, typed HTTP requests, configuration constraints, and package dependency rules. Frontend checks cover authorization state, UI behavior, assistant review, and save failures. Browser scripts exercise full financial and assistant workflows against disposable databases.
+
+See [developer setup and contribution guide](docs/development.md), [API reference](docs/api.md), and [executed verification results](docs/verification.md). API documentation is available at `/swagger-ui/index.html`; the JSON specification is at `/v3/api-docs`. Authorize with the bearer token. Set `API_DOCS_ENABLED=false` when those endpoints are not needed.
+
+## Data and operations
+
+### Persistence and backups
+
+The default packaged application and Docker deployment use **`data/consulting.db` on your disk**. `DATA_DIR` selects another Docker host directory; `DB_PATH` selects the native database path. Browser storage holds the theme and session token, not the financial database. Avoid running two application instances against the same SQLite file.
+
+Create a consistent online backup with Python 3:
 
 ```powershell
-docker compose stop app
-New-Item -ItemType Directory -Force backups
-docker compose cp app:/app/data/consulting.db ./backups/consulting.db
-docker compose start app
+./scripts/backup.ps1 -Database ./data/consulting.db -Destination ./backups
 ```
 
-Restore: stop the app; make a safety backup of the current database; verify the selected backup using Python `sqlite3` / `PRAGMA integrity_check`; replace the native `data/consulting.db` or use `docker compose cp ./backups/consulting.db app:/app/data/consulting.db` while stopped. For Docker, restore file ownership with `docker compose run --rm --user root --cap-add CHOWN --entrypoint chown app consulting:consulting /app/data/consulting.db`. Restart and verify invoices, balances and audit history. Preserve any journal/WAL files if copying an uncleanly stopped database; prefer a clean stop or SQLite backup API. Never copy a live SQLite database with a raw file copy.
+The tool uses SQLite's backup API, refuses to overwrite existing backup files, and verifies integrity. Keep encrypted copies outside this machine. Persistence survives restarts and container recreation; recovery from disk failure or accidental deletion depends on backups.
 
-Flyway validates and applies versioned migrations on startup. Do not edit applied migrations. Back up before an upgrade. Future PostgreSQL migration requires adapting identity columns, SQLite insert-ID retrieval, date columns and database connection configuration, then migrating data and validating all monetary totals; it is an architectural migration path, not a currently selectable backend.
+Restore with the application stopped: first back up the current file, verify the chosen backup with `PRAGMA integrity_check`, replace the database, and restart. Verify invoices, balances, and audit history. See [operations and restore details](docs/operations.md). Never copy a live SQLite file with an ordinary file copy.
+
+### Upgrade
+
+1. Back up the database and retain the current release/configuration.
+2. Build and test the new release.
+3. Recreate the service with `docker compose up --build -d`.
+4. Check logs, migrations, workspace records, and balances.
+
+Flyway validates and applies versioned migrations at startup. Do not edit an applied migration to change existing installations. A downgrade is not an automatic schema rollback; recover through a compatible release or a verified backup.
+
+### Runtime boundary
+
+The Docker runtime runs as UID 10001, publishes localhost only, drops Linux capabilities, uses a read-only root filesystem, and keeps an executable temporary mount for SQLite JDBC's native library. The data bind mount remains writable. Sharing the backend beyond this local single-user setup requires HTTPS, suitable identity/access controls, and protected backups; publishing a frontend does not provide those controls.
+
+## Hosting
+
+**GitHub Pages can host the React frontend.** It cannot run Java, SQLite, provider credentials, or write to your local disk. A Pages deployment needs a separately running backend with persistent storage, HTTPS reachability, and an explicit frontend-origin allowlist.
+
+The optional, manually triggered `.github/workflows/pages.yml` publishes only the frontend after `VITE_API_BASE_URL` is configured as a repository variable. Nothing is published automatically. To keep the database on your local disk, keep the backend on your machine and provide secure reachability rather than assuming a Pages URL can access it.
+
+See [Pages deployment instructions](docs/work-assistant.md#github-pages) and [GitHub's hosting model](https://docs.github.com/en/pages/getting-started-with-github-pages/what-is-github-pages).
 
 ## Documentation
 
 - [Architecture and decisions](docs/architecture.md)
-- [API and integration boundary](docs/api.md)
+- [Configuration reference](docs/configuration.md)
+- [Developer setup and extension guide](docs/development.md)
+- [API reference](docs/api.md)
+- [Work Assistant and provider adapters](docs/work-assistant.md)
+- [Operations, backup, and restore](docs/operations.md)
 - [Verification results](docs/verification.md)
-- [Sample draft invoice](docs/sample-invoice.pdf) â€” a zero-value draft, with no invented work
-
-Swagger UI: http://127.0.0.1:8080/swagger-ui/index.html. OpenAPI JSON: `/v3/api-docs`. Authorize with your local bearer token. Never add access tokens to query strings or URLs. The manual email payload is the future Gmail/SMTP adapter boundary; no external mail is sent in this release.
+- [Sample draft PDF](docs/sample-invoice.pdf)

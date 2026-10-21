@@ -2,12 +2,14 @@ package io.consulting;
 
 import org.springframework.boot.SpringApplication;
 import org.springframework.boot.autoconfigure.SpringBootApplication;
+import org.springframework.boot.context.properties.ConfigurationPropertiesScan;
 
 @SpringBootApplication
+@ConfigurationPropertiesScan
 public class App {
 
-  public static void main(String[] args) {
-    new java.io.File("data").mkdirs();
-    SpringApplication.run(App.class, args);
-  }
+    public static void main(String[] args) {
+        new java.io.File("data").mkdirs();
+        SpringApplication.run(App.class, args);
+    }
 }

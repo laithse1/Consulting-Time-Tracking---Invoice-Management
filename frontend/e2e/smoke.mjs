@@ -22,11 +22,7 @@ const process = externalBase
   ? undefined
   : spawn(
       java,
-      [
-        "-jar",
-        resolve(root, "backend/target/invoice-manager-1.0.0.jar"),
-        "--debug=false",
-      ],
+      ["-jar", resolve(root, "backend/target/invoice-manager-1.0.0.jar"), "--debug=false"],
       {
         cwd: root,
         env: {
@@ -71,7 +67,13 @@ try {
   if (!ready) throw new Error("Application failed to start: " + logs);
   expect((await fetch(base + "/api/state")).status).toBe(401);
   expect((await api("/state")).entries).toHaveLength(7);
-  browser = await chromium.launch({ channel: "chrome", headless: true });
+  browser = await chromium.launch({
+    channel:
+      globalThis.process.env.E2E_BROWSER_CHANNEL === "bundled"
+        ? undefined
+        : globalThis.process.env.E2E_BROWSER_CHANNEL || "chrome",
+    headless: true,
+  });
   const context = await browser.newContext({
     viewport: { width: 1440, height: 1100 },
     permissions: ["clipboard-read", "clipboard-write"],
@@ -96,9 +98,7 @@ try {
   });
   await page.getByRole("button", { name: "Toggle theme" }).click();
   await page.getByRole("button", { name: "Time Tracker", exact: true }).click();
-  await expect(
-    page.getByRole("cell", { name: "Draft / incomplete" }),
-  ).toHaveCount(7);
+  await expect(page.getByRole("cell", { name: "Draft / incomplete" })).toHaveCount(7);
   await page.getByRole("button", { name: "Log time", exact: true }).click();
   const dialog = page.getByRole("dialog");
   await dialog.getByLabel("Date worked").fill("2026-09-02");
@@ -111,13 +111,9 @@ try {
   await dialog.getByLabel("Entry status").selectOption("0");
   await dialog.getByRole("button", { name: "Save entry" }).click();
   await expect(dialog).toHaveCount(0);
-  await expect(
-    page.getByText("Isolated E2E fixture: one hour of test services"),
-  ).toBeVisible();
+  await expect(page.getByText("Isolated E2E fixture: one hour of test services")).toBeVisible();
   await page.getByRole("button", { name: "Timesheets", exact: true }).click();
-  const weeks = await api(
-    "/compliance?contract=1&from=2026-09-01&to=2026-09-30",
-  );
+  const weeks = await api("/compliance?contract=1&from=2026-09-01&to=2026-09-30");
   // Exercise weekly review through the UI for every partial/below-minimum week.
   for (const week of weeks) {
     await page
@@ -126,9 +122,7 @@ try {
       .getByRole("button", { name: "Review" })
       .click();
     await dialog
-      .getByLabel(
-        "Shortfall / partial-week clarification and planning acknowledgement",
-      )
+      .getByLabel("Shortfall / partial-week clarification and planning acknowledgement")
       .fill("Isolated test planning review; bill actual work only.");
     await dialog.getByRole("button", { name: "Save weekly review" }).click();
     await expect(dialog).toHaveCount(0);
@@ -138,22 +132,14 @@ try {
     .filter({ has: page.locator("svg") })
     .first()
     .click();
-  await page
-    .getByRole("button", { name: "Create invoice", exact: true })
-    .click();
+  await page.getByRole("button", { name: "Create invoice", exact: true }).click();
   await dialog.getByRole("button", { name: "Create draft for review" }).click();
   await expect(page.getByText("Validation passed")).toBeVisible();
   page.once("dialog", (d) => d.accept());
   await page.getByRole("button", { name: "Confirm & finalize" }).click();
-  await expect(
-    page.getByText("Ready for Review", { exact: true }),
-  ).toBeVisible();
-  await page
-    .getByRole("button", { name: "Withdraw unpaid invoice for correction" })
-    .click();
-  await dialog
-    .getByLabel("Documented reason for withdrawal")
-    .fill("Correct actual test duration");
+  await expect(page.getByText("Ready for Review", { exact: true })).toBeVisible();
+  await page.getByRole("button", { name: "Withdraw unpaid invoice for correction" }).click();
+  await dialog.getByLabel("Documented reason for withdrawal").fill("Correct actual test duration");
   page.once("dialog", (d) => d.accept());
   await dialog.getByRole("button", { name: "Confirm withdrawal" }).click();
   await expect(page.getByText("Withdrawn", { exact: true })).toBeVisible();
@@ -172,9 +158,7 @@ try {
     .first()
     .click();
   await page.getByRole("button", { name: "Review", exact: true }).click();
-  await page
-    .getByRole("button", { name: "Create documented replacement" })
-    .click();
+  await page.getByRole("button", { name: "Create documented replacement" }).click();
   await dialog
     .getByLabel("Reason for replacement (required)")
     .fill("Corrected actual test duration after withdrawal");
@@ -182,32 +166,23 @@ try {
   await expect(page.getByText("Validation passed")).toBeVisible();
   page.once("dialog", (d) => d.accept());
   await page.getByRole("button", { name: "Confirm & finalize" }).click();
-  await expect(
-    page.getByText("Ready for Review", { exact: true }),
-  ).toBeVisible();
+  await expect(page.getByText("Ready for Review", { exact: true })).toBeVisible();
   const state = await api("/state");
   const invoice = state.invoices[0];
   expect(invoice.total).toBe("150.00");
   expect(state.invoices[1].state).toBe("Replaced");
   expect(state.invoices[1].balance).toBe(0);
   for (const format of ["pdf", "xlsx", "csv"]) {
-    const r = await fetch(
-      base + `/api/invoices/${invoice.id}/export/${format}`,
-      { headers: { Authorization: "Bearer " + token } },
-    );
+    const r = await fetch(base + `/api/invoices/${invoice.id}/export/${format}`, {
+      headers: { Authorization: "Bearer " + token },
+    });
     expect(r.status).toBe(200);
     expect((await r.arrayBuffer()).byteLength).toBeGreaterThan(100);
   }
   await page.getByRole("button", { name: "Prepare submission email" }).click();
-  await expect(dialog.getByLabel("Subject", { exact: true })).toHaveValue(
-    /LA|Laith/,
-  );
-  await dialog
-    .getByLabel("Optional CC to Brandon (enter address)")
-    .fill("fixture@example.test");
-  await dialog
-    .getByRole("button", { name: "Copy email subject & body" })
-    .click();
+  await expect(dialog.getByLabel("Subject", { exact: true })).toHaveValue(/LA|Laith/);
+  await dialog.getByLabel("Optional CC to Brandon (enter address)").fill("fixture@example.test");
+  await dialog.getByRole("button", { name: "Copy email subject & body" }).click();
   expect(await page.evaluate(() => navigator.clipboard.readText())).toContain(
     "CC: fixture@example.test",
   );
@@ -217,17 +192,11 @@ try {
   await expect(page.getByText("Sent", { exact: true })).toBeVisible();
   await page.getByRole("button", { name: "Mark approved" }).click();
   await expect(page.getByText("Approved", { exact: true })).toBeVisible();
-  await page
-    .getByRole("button", { name: "Record payment", exact: true })
-    .click();
+  await page.getByRole("button", { name: "Record payment", exact: true }).click();
   await dialog.getByLabel("Amount received USD").fill("25");
   await dialog.getByLabel("Payment method").fill("Test ACH");
-  await dialog
-    .getByLabel("Actual date received")
-    .fill(new Date().toLocaleDateString("en-CA"));
-  await dialog
-    .getByLabel("Payment / bank reference")
-    .fill("Isolated test receipt");
+  await dialog.getByLabel("Actual date received").fill(new Date().toLocaleDateString("en-CA"));
+  await dialog.getByLabel("Payment / bank reference").fill("Isolated test receipt");
   await dialog.getByRole("button", { name: "Confirm receipt" }).click();
   await expect(page.getByText("Partially Paid", { exact: true })).toBeVisible();
   expect((await api("/state")).invoices[0].balance).toBe(125);
@@ -239,11 +208,9 @@ try {
     path: resolve(root, "tmp/dashboard-mobile.png"),
     fullPage: true,
   });
-  expect(
-    await page.evaluate(
-      () => document.documentElement.scrollWidth <= window.innerWidth,
-    ),
-  ).toBe(true);
+  expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(
+    true,
+  );
   expect(errors).toEqual([]);
   console.log(
     "PASS: login, seeded drafts, manual entry, weekly review, invoice finalization, withdrawal/correction/replacement, PDF/XLSX/CSV, editable email/CC, submission, approval, partial payment, historical isolation, dark/mobile layouts.",

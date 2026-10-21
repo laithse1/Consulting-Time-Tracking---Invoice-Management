@@ -1,5 +1,7 @@
 .git
 .env
+**/.env
+**/.env.local
 **/node_modules
 **/target
 **/dist
@@ -7,3 +9,6 @@
 **/*.db*
 docs
 backend/src/main/resources/static
+config/assistant-providers.json
+backups
+tmp

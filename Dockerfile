@@ -3,6 +3,13 @@ WORKDIR /build/frontend
 COPY frontend/package*.json ./
 RUN npm ci
 COPY frontend/ ./
+ARG VITE_APP_TITLE="Consulting Invoice Manager"
+ARG VITE_WORKSPACE_LABEL="Independent consulting"
+ARG VITE_API_BASE_URL=""
+ARG VITE_BASE_PATH="/"
+ARG VITE_ASSISTANT_AUTOSAVE_MS=600
+ARG VITE_TIMER_TICK_MS=1000
+ARG VITE_NOTICE_DURATION_MS=5000
 RUN npm run build
 
 FROM maven:3.9-eclipse-temurin-21 AS backend

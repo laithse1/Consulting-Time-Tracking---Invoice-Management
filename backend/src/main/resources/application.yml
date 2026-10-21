@@ -1,0 +1,51 @@
+spring:
+  application:
+    name: consulting-invoice-manager
+  datasource:
+    url: jdbc:sqlite:${DB_PATH:./data/consulting.db}
+    driver-class-name: org.sqlite.JDBC
+    hikari:
+      # SQLite writes are serialized; transaction scopes share one connection.
+      maximum-pool-size: 1
+      connection-init-sql: PRAGMA foreign_keys=ON
+  jackson:
+    deserialization:
+      accept-float-as-int: false
+    serialization:
+      write-dates-as-timestamps: false
+  servlet:
+    multipart:
+      max-file-size: 5MB
+
+server:
+  address: ${BIND_ADDRESS:127.0.0.1}
+  port: ${APP_PORT:8080}
+  error:
+    include-message: never
+
+app:
+  token: ${APP_TOKEN:}
+  allowed-origins: ${APP_ALLOWED_ORIGINS:}
+  provider-config: ${ASSISTANT_PROVIDER_CONFIG:./config/assistant-providers.json}
+  invoice:
+    number-prefix: ${INVOICE_NUMBER_PREFIX:LA}
+  assistant:
+    max-source-characters: ${ASSISTANT_MAX_SOURCE_CHARACTERS:10000}
+    max-actions: ${ASSISTANT_MAX_ACTIONS:30}
+    history-limit: ${ASSISTANT_HISTORY_LIMIT:50}
+  provider:
+    connect-timeout: ${AI_CONNECT_TIMEOUT:8s}
+    request-timeout: ${AI_REQUEST_TIMEOUT:35s}
+    response-timeout: ${AI_RESPONSE_TIMEOUT:20s}
+    max-response-bytes: ${AI_MAX_RESPONSE_BYTES:1048576}
+    max-config-bytes: ${AI_MAX_CONFIG_BYTES:262144}
+
+logging:
+  level:
+    root: ${LOG_LEVEL:INFO}
+
+springdoc:
+  api-docs:
+    enabled: ${API_DOCS_ENABLED:true}
+  swagger-ui:
+    enabled: ${API_DOCS_ENABLED:true}

@@ -1,13 +1,8 @@
 import { describe, it, expect, vi, afterEach } from "vitest";
-import {
-  render,
-  screen,
-  cleanup,
-  fireEvent,
-  act,
-} from "@testing-library/react";
+import { render, screen, cleanup, fireEvent, act } from "@testing-library/react";
 import App, { Badge } from "./App";
-import { weekStart, monthEnd, duration } from "./api";
+import { weekStart, monthEnd } from "@/lib/dates";
+import { duration } from "@/lib/time";
 afterEach(() => {
   cleanup();
   sessionStorage.clear();
@@ -64,9 +59,7 @@ describe("local workspace", () => {
     );
     sessionStorage.setItem("token", "test-local-token");
     render(<App />);
-    expect(
-      await screen.findByText("A clear view of your work."),
-    ).toBeInTheDocument();
+    expect(await screen.findByText("A clear view of your work.")).toBeInTheDocument();
     fireEvent.change(screen.getByLabelText("Reporting month"), {
       target: { value: "2020-01" },
     });
@@ -75,22 +68,13 @@ describe("local workspace", () => {
       complete?.({ ok: true, headers: new Headers(), json: async () => state });
     });
     expect(screen.getByLabelText("Local access token")).toBeInTheDocument();
-    expect(
-      screen.queryByText("Outstanding receivables"),
-    ).not.toBeInTheDocument();
+    expect(screen.queryByText("Outstanding receivables")).not.toBeInTheDocument();
   });
   it("requires a token before showing financial information", () => {
     render(<App />);
-    expect(screen.getByLabelText("Local access token")).toHaveAttribute(
-      "type",
-      "password",
-    );
-    expect(
-      screen.getByRole("button", { name: /Unlock workspace/ }),
-    ).toBeInTheDocument();
-    expect(
-      screen.queryByText("Outstanding receivables"),
-    ).not.toBeInTheDocument();
+    expect(screen.getByLabelText("Local access token")).toHaveAttribute("type", "password");
+    expect(screen.getByRole("button", { name: /Unlock workspace/ })).toBeInTheDocument();
+    expect(screen.queryByText("Outstanding receivables")).not.toBeInTheDocument();
   });
   it("shows authentication failures without unlocking", async () => {
     vi.stubGlobal(
@@ -106,9 +90,7 @@ describe("local workspace", () => {
     });
     fireEvent.click(screen.getByRole("button", { name: /Unlock workspace/ }));
     expect(await screen.findByRole("alert")).toHaveTextContent("Unauthorized");
-    expect(
-      screen.queryByText("Outstanding receivables"),
-    ).not.toBeInTheDocument();
+    expect(screen.queryByText("Outstanding receivables")).not.toBeInTheDocument();
   });
   it("handles month boundaries and configurable week starts", () => {
     expect(weekStart("2026-09-01", 1)).toBe("2026-08-31");
