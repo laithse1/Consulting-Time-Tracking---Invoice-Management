@@ -197,7 +197,7 @@ sequenceDiagram
     Service->>DB: Store proposed plan and version
     Service-->>UI: Editable action plan
     User->>UI: Correct facts and confirm
-    UI->>API: Save reviewed version; apply confirmed plan
+    UI->>API: Save reviewed version and apply confirmed plan
     API->>Service: Begin transaction
     loop Actions in reviewed order
         Service->>Ledger: Validate and execute action
@@ -205,7 +205,7 @@ sequenceDiagram
     end
     Service->>DB: Save applied receipt and commit
     Service-->>UI: Persistent results
-    Note over Service,DB: Failure rolls back the batch; retrying an applied plan returns its saved receipt
+    Note over Service,DB: Failure rolls back the batch. Retrying an applied plan returns its saved receipt.
 ```
 
 See [assistant grammar and provider setup](docs/work-assistant.md) for timer commands, compliance review, and submission-email preparation.
@@ -230,7 +230,7 @@ sequenceDiagram
     UI->>Service: Create draft and preview
     Service->>DB: Read eligible work, expenses, contract, weekly reviews
     Service-->>UI: Exact totals and validation warnings
-    User->>UI: Resolve warnings; confirm finalization
+    User->>UI: Resolve warnings and confirm finalization
     UI->>Service: Finalize confirmed invoice
     Service->>DB: Atomically freeze snapshot and allocate sources
     User->>UI: Download invoice
