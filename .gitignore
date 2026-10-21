@@ -1,0 +1,15 @@
+node_modules/
+target/
+dist/
+data/
+.env
+*.db*
+*.log
+!docs/sample-invoice.pdf
+backups/
+backend/src/main/resources/static/
+*.tsbuildinfo
+test-results/
+playwright-report/
+tmp/
+.vscode/

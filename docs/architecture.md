@@ -1,0 +1,13 @@
+# Architecture and implementation plan
+
+The browser calls a same-origin REST API. Spring Boot owns validation, financial calculations, invoice snapshots, audit records and exports. SQLite uses Flyway SQL migrations; repository access uses parameterized JDBC and portable relational tables to simplify a later PostgreSQL migration. Money uses BigDecimal, durations use integer seconds, dates use ISO local dates, and timer instants use UTC. Local work dates are explicitly supplied by the user.
+
+Implementation stages: (1) relational schema and API; (2) clients, contracts, projects, work and timer; (3) compliance, invoice validation, snapshots and exports; (4) submission, payments and reports; (5) automated boundary tests; (6) deployment and operational documentation.
+
+Weeks use a configurable start day (1 Monday through 7 Sunday). A whole week belongs to its start date for reporting; compliance includes work across month boundaries. Contract start/end partial weeks retain the configured minimum without proration and are flagged for clarification. Monthly invoices include only actual work dated in that month/period. Shortfalls never generate time or invoice lines. A documented, manually approved monetary adjustment can be added explicitly. Overtime needs written approval. Resolving a shortfall records planning acknowledgement, not permission to bill it.
+
+Draft activities have no dates or durations. Approximate meeting durations are notes only. Confirming an activity requires an actual date and duration. Completed work cannot overlap for the same contractor. A database singleton serializes timers. Invoice finalization runs transactionally with unique work-entry allocations, snapshots all presentation data, and requires a confirmation flag. Allocated work cannot be edited until an explicit unpaid-invoice withdrawal. Corrections require explicitly withdrawing an unpaid invoice with a documented reason, editing released source work, and issuing a linked replacement. Original snapshots and audit history are retained.
+
+Status is derived for partial payment, paid and overdue. Due dates are submission plus contract payment days. Payment events and audit events are append-only. Historical prior-work receipt is separate from recurring invoices. Email integration is intentionally manual; the submission payload is an adapter boundary for a future explicitly authorized mail provider.
+
+Default deployment publishes only 127.0.0.1. API bearer authentication is required for every request; production assets and API are same-origin. Tokens live only in browser session storage. Reverse-proxy TLS and individual identity are required before sharing access beyond this single-user local deployment. No bank details or tokens are seeded.
