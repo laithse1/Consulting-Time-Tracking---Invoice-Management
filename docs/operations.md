@@ -14,6 +14,12 @@ docker compose restart app
 
 The UI reads financial data from SQLite when unlocked/refreshed. Theme preference and session token are browser state; they are not a financial backup. Avoid two processes writing the same database file. Flyway migrations run at startup.
 
+## Swagger and API documentation
+
+With `API_DOCS_ENABLED=true`, this workstation serves [Swagger UI](http://127.0.0.1:18080/swagger-ui/index.html), [OpenAPI JSON](http://127.0.0.1:18080/v3/api-docs), and [OpenAPI YAML](http://127.0.0.1:18080/v3/api-docs.yaml). Substitute the actual backend origin for other deployments. [The API guide](api.md#swagger-and-openapi-urls) documents every entry/configuration/helper URL and authorization steps.
+
+Documentation is readable without the token while enabled. API execution still requires the workspace bearer token and uses the same database as the UI. Set `API_DOCS_ENABLED=false` and recreate/restart the backend to return 404 for documentation endpoints while retaining the authenticated API. Root `.env` changes require Compose recreation; source changes also require rebuilding. Native Java requires exported settings rather than automatically loading `.env`.
+
 ## Consistent backups
 
 With Python 3 installed:
@@ -59,17 +65,18 @@ The earlier Docker named-volume database was cleanly stopped, backed up, and mig
 
 ## Common problems
 
-| Symptom                               | Checks                                                                                                                                                     |
-| ------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Startup rejects configuration         | Supply a token of at least 24 characters; inspect the named invalid setting/limit in logs.                                                                 |
-| Port unavailable                      | Change root `.env` `APP_PORT`, then recreate Compose. On this workstation port 18080 is verified.                                                          |
-| UI unlock fails                       | Confirm the token belongs to the running backend instance; avoid copying quotes/whitespace.                                                                |
-| Read-only database                    | Check the host mount path, file permissions, and whether another process is using a different database.                                                    |
-| SQLite native-library failure         | Use the provided glibc runtime and executable `/tmp` mount.                                                                                                |
-| Missing expected records              | Confirm `DATA_DIR`/`DB_PATH` and working directory before creating any new data. Native Maven development can otherwise use a different relative path.     |
-| Origin rejected in a split deployment | Configure the exact frontend origin and restart the backend. CORS does not replace bearer authentication.                                                  |
-| Provider unavailable                  | Check enabled profile, installed/model name, endpoint, backend credentials, JSON request, and response pointer. Local rules still work without a provider. |
-| Invoice cannot finalize               | Resolve the displayed actual-work, weekly review, expense approval, or adjustment warnings. A shortfall does not authorize charges.                        |
+| Symptom                                 | Checks                                                                                                                                                                           |
+| --------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Startup rejects configuration           | Supply a token of at least 24 characters; inspect the named invalid setting/limit in logs.                                                                                       |
+| Port unavailable                        | Change root `.env` `APP_PORT`, then recreate Compose. On this workstation port 18080 is verified.                                                                                |
+| UI unlock fails                         | Confirm the token belongs to the running backend instance; avoid copying quotes/whitespace.                                                                                      |
+| Swagger UI or specification returns 404 | Check `API_DOCS_ENABLED`, backend host/port, and proxy routes. Recreate/restart after changing the documentation flag. See the [URL reference](api.md#swagger-and-openapi-urls). |
+| Read-only database                      | Check the host mount path, file permissions, and whether another process is using a different database.                                                                          |
+| SQLite native-library failure           | Use the provided glibc runtime and executable `/tmp` mount.                                                                                                                      |
+| Missing expected records                | Confirm `DATA_DIR`/`DB_PATH` and working directory before creating any new data. Native Maven development can otherwise use a different relative path.                           |
+| Origin rejected in a split deployment   | Configure the exact frontend origin and restart the backend. CORS does not replace bearer authentication.                                                                        |
+| Provider unavailable                    | Check enabled profile, installed/model name, endpoint, backend credentials, JSON request, and response pointer. Local rules still work without a provider.                       |
+| Invoice cannot finalize                 | Resolve the displayed actual-work, weekly review, expense approval, or adjustment warnings. A shortfall does not authorize charges.                                              |
 
 ## Deployment boundary
 

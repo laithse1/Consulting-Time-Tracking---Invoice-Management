@@ -8,7 +8,7 @@
 ![TypeScript](https://img.shields.io/badge/TypeScript-5.9-3178C6)
 ![Storage](https://img.shields.io/badge/Storage-local_SQLite-003B57)
 
-Describe your work, review the facts, and apply a plan that logs time, controls timers, prepares invoice drafts, and generates reports. Local rules work without an LLM. Optional provider profiles extend extraction through a private server-side configuration file. Your records stay in a database on your own disk.
+Describe your work, review the facts, and apply a plan that logs time, controls timers, prepares invoice drafts, and generates reports. Local rules work without an LLM. Optional provider profiles add professional invoice wording and conversational corrections through a private server-side configuration file. Your records stay in a database on your own disk.
 
 Designed for a **single-user consulting workflow**. Financial approvals stay explicit: the system does not invent hours, authorize contractual adjustments, record assumed payments, or send email.
 
@@ -20,17 +20,17 @@ Designed for a **single-user consulting workflow**. Financial approvals stay exp
 
 ## Features
 
-| Workspace           | What it does                                                                                                                                             |
-| ------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Work Assistant      | Saves unfinished notes; extracts work facts; presents editable, versioned plans; applies reviewed actions atomically; retains receipts for safe retries. |
-| Time Tracker        | Tracks one running/paused timer; records actual durations; keeps incomplete or estimated activities as drafts.                                           |
-| Timesheets          | Reviews full contractual weeks, including month boundaries; records availability, written exceptions, and overtime references.                           |
-| Clients & Contracts | Manages clients, projects, repositories, hourly rates, weekly expectations, payment terms, and payment instructions.                                     |
-| Invoices            | Prepares dated itemized/grouped drafts; validates eligibility; freezes issued snapshots; exports PDF, Excel, and CSV.                                    |
-| Corrections         | Withdraws an unpaid issued invoice with a reason, releases its source records for correction, and links the replacement while preserving history.        |
-| Payments            | Appends actual receipts; calculates balances, partial payment, due dates, and overdue status; separates historical prior-work receipts.                  |
-| Reports             | Shows confirmed actual and billable time, project breakdowns, and services value.                                                                        |
-| Local storage       | Persists financial records, timer state, notes, plans, snapshots, and audit history in SQLite; includes verified backup tooling.                         |
+| Workspace           | What it does                                                                                                                                                          |
+| ------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Work Assistant      | Saves notes; proposes invoice wording and work facts; accepts corrections; applies reviewed plans atomically; reopens unfinalized drafts without duplicating records. |
+| Time Tracker        | Tracks one running/paused timer; records actual durations; keeps incomplete or estimated activities as drafts.                                                        |
+| Timesheets          | Reviews full contractual weeks, including month boundaries; records availability, written exceptions, and overtime references.                                        |
+| Clients & Contracts | Manages clients, projects, repositories, hourly rates, weekly expectations, payment terms, and payment instructions.                                                  |
+| Invoices            | Prepares dated itemized/grouped drafts; validates eligibility; freezes issued snapshots; exports PDF, Excel, and CSV.                                                 |
+| Corrections         | Withdraws an unpaid issued invoice with a reason, releases its source records for correction, and links the replacement while preserving history.                     |
+| Payments            | Appends actual receipts; calculates balances, partial payment, due dates, and overdue status; separates historical prior-work receipts.                               |
+| Reports             | Shows confirmed actual and billable time, project breakdowns, and services value.                                                                                     |
+| Local storage       | Persists financial records, timer state, notes, plans, snapshots, and audit history in SQLite; includes verified backup tooling.                                      |
 
 ### System views
 
@@ -48,6 +48,12 @@ Screenshots use an isolated demonstration database, not the live financial datab
 <img src="docs/images/mobile.png" alt="Mobile workspace" width="360" />
 
 </details>
+
+### Correct an invoice through conversation
+
+![Saved assistant corrections](docs/images/assistant-corrections.png)
+
+Choose a configured language provider to rewrite everyday notes and interpret correction requests. Offline mode offers basic wording cleanup and explicit corrections such as `Task 1 duration: 90m`. Both paths require actual facts and your review.
 
 ## Quick start
 
@@ -174,6 +180,8 @@ Generate report September 2026
 ```
 
 Review dates, project assignment, categories, billing flags, and actual durations. Apply the plan once. This example produces 2.5 actual hours, an invoice draft from eligible unbilled work, and a report. An invoice draft still needs contractual review and finalization.
+
+**Prepare an invoice** is selected by default for work notes. Check its visible service period, or specify an invoice command with its month. Provider-generated wording and corrections stay draft until you confirm the affected work. Ask for corrections before applying, or choose **Revise saved draft** afterward to update the same entries and unfinalized invoice. Review its dated line items and warnings, then finalize and export from invoice review. The assistant cannot change issued snapshots or submit an invoice.
 
 The parser accepts ISO dates, named dates, “today”/“yesterday”, numeric durations such as `1h 30m`, and clock ranges such as `09:00–11:00`. Missing facts and estimates stay draft. Duration-only entries retain no invented clock start; clock overlaps can only be checked when times are supplied.
 
@@ -305,7 +313,17 @@ Run `npm --prefix frontend run format` to apply repository formatting. Java uses
 
 Backend checks cover ledger arithmetic, snapshots, corrections, overlap/duplicate protection, assistant atomicity and retries, provider source validation, typed HTTP requests, configuration constraints, and package dependency rules. Frontend checks cover authorization state, UI behavior, assistant review, and save failures. Browser scripts exercise full financial and assistant workflows against disposable databases.
 
-See [developer setup and contribution guide](docs/development.md), [API reference](docs/api.md), and [executed verification results](docs/verification.md). API documentation is available at `/swagger-ui/index.html`; the JSON specification is at `/v3/api-docs`. Authorize with the bearer token. Set `API_DOCS_ENABLED=false` when those endpoints are not needed.
+See [developer setup and contribution guide](docs/development.md), [API reference](docs/api.md), and [executed verification results](docs/verification.md).
+
+### Swagger and OpenAPI
+
+Once the backend is running on this workstation:
+
+- [Swagger UI](http://127.0.0.1:18080/swagger-ui/index.html) — interactive reference and requests.
+- [OpenAPI JSON](http://127.0.0.1:18080/v3/api-docs) and [OpenAPI YAML](http://127.0.0.1:18080/v3/api-docs.yaml) — generated specifications.
+- [Swagger shortcut](http://127.0.0.1:18080/swagger-ui.html) and [UI configuration](http://127.0.0.1:18080/v3/api-docs/swagger-config).
+
+Fresh installs/native Java use port 8080 by default; substitute your backend origin when different. In **Authorize**, enter only the `APP_TOKEN` value: Swagger supplies the bearer prefix. Documentation is readable without a token, while `/api/**` operations require it. Set `API_DOCS_ENABLED=false` and recreate/restart the backend to disable documentation. See [all Swagger URLs, runtime addresses, authorization, and troubleshooting](docs/api.md#swagger-and-openapi-urls).
 
 ## Data and operations
 

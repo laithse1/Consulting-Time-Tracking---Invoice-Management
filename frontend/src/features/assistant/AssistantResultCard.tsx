@@ -21,6 +21,41 @@ export function AssistantResultCard({ result, onInvoice }: Props) {
       {result.invoice && (
         <>
           <p>{result.invoice.number} · Draft</p>
+          {result.preview && (
+            <>
+              <p>
+                {Number(result.preview.hours).toFixed(2)} billable hours ·{" "}
+                {usd(result.preview.total)} total
+              </p>
+              <div className="table-wrap">
+                <table>
+                  <thead>
+                    <tr>
+                      <th>Date</th>
+                      <th>Work description</th>
+                      <th>Hours</th>
+                      <th>Amount</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {result.preview.entries.map((entry) => (
+                      <tr key={entry.id}>
+                        <td>{entry.work_date}</td>
+                        <td>{entry.description}</td>
+                        <td>{(Number(entry.seconds) / 3600).toFixed(2)}</td>
+                        <td>{usd(entry.amount || 0)}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+              <p className="small muted">
+                Services {usd(result.preview.subtotal)} · Expenses{" "}
+                {usd(result.preview.expenseTotal)}. Resolve warnings and finalize in invoice review
+                before submission.
+              </p>
+            </>
+          )}
           <button className="btn secondary" onClick={() => onInvoice(result.invoice!.id)}>
             Review invoice
           </button>

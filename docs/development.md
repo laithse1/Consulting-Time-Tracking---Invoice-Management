@@ -16,19 +16,23 @@ mvn -f backend/pom.xml clean verify
 
 For hot reload, follow the two-terminal setup in the root README. Vite serves port 5173 and proxies `/api` to `VITE_DEV_API_TARGET`. Java does not load the root Compose `.env` automatically; supply its token/database environment explicitly.
 
+## Swagger during development
+
+For default native development, open [Swagger UI](http://127.0.0.1:8080/swagger-ui/index.html), [OpenAPI JSON](http://127.0.0.1:8080/v3/api-docs), or [OpenAPI YAML](http://127.0.0.1:8080/v3/api-docs.yaml) on port 8080. The current Docker setup uses port 18080 instead. Use the backend directly rather than the Vite or Pages frontend origin. In **Authorize**, supply only the backend's `APP_TOKEN` value. Use a development database for write requests. [The API guide](api.md#swagger-and-openapi-urls) lists the redirect/configuration/helper URLs, documentation flag, and troubleshooting.
+
 ## Backend responsibilities
 
-| Package                                                    | Responsibility                                                                                          |
-| ---------------------------------------------------------- | ------------------------------------------------------------------------------------------------------- |
-| `controller`                                               | Routes, typed requests, Bean Validation, response adaptation. No JDBC/provider implementation access.   |
-| `dto.request`                                              | Wire contracts using snake_case names compatible with the API.                                          |
-| `service`                                                  | Business decisions, validation, transaction boundaries, and cross-repository coordination.              |
-| `service.assistant`                                        | Saved drafts, versioned plan review, opt-in extraction, atomic action application, receipts.            |
-| `service.export`                                           | Rendering existing invoice data; issued invoices use stored snapshots.                                  |
-| `repository`                                               | Parameterized SQL, row lookups, insert identities, and persistence. No service/controller dependencies. |
-| `domain`                                                   | Framework-independent validation, arithmetic, work periods, and deterministic text parsing.             |
-| `integration.ai`                                           | Bounded HTTP JSON extraction; no execution tools or database access.                                    |
-| `config`, `security`, `validation`, `exception`, `support` | Configuration, request/authentication boundaries, error envelopes, and serialization adapters.          |
+| Package                                                    | Responsibility                                                                                                                      |
+| ---------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------- |
+| `controller`                                               | Routes, typed requests, Bean Validation, response adaptation. No JDBC/provider implementation access.                               |
+| `dto.request`                                              | Wire contracts using snake_case names compatible with the API.                                                                      |
+| `service`                                                  | Business decisions, validation, transaction boundaries, and cross-repository coordination.                                          |
+| `service.assistant`                                        | Saved drafts, wording proposals, versioned conversations/review, atomic application, editable receipt reopening, and exact reports. |
+| `service.export`                                           | Rendering existing invoice data; issued invoices use stored snapshots.                                                              |
+| `repository`                                               | Parameterized SQL, row lookups, insert identities, and persistence. No service/controller dependencies.                             |
+| `domain`                                                   | Framework-independent validation, arithmetic, work periods, and deterministic text parsing.                                         |
+| `integration.ai`                                           | Bounded HTTP JSON extraction, wording, and correction suggestions; no execution tools or database access.                           |
+| `config`, `security`, `validation`, `exception`, `support` | Configuration, request/authentication boundaries, error envelopes, and serialization adapters.                                      |
 
 This is Spring JDBC, not JPA: database rows and snapshot projections use maps, with typed HTTP DTOs and explicitly typed repository arguments. Do not add unused entity/DTO layers merely to mirror package names. `RequestMapper` removes null optional fields so domain defaults stay intentional. `JsonDocuments` preserves decimal precision on snapshot reload.
 
@@ -81,7 +85,7 @@ Install Chrome for the default scripts. Alternatively install bundled Chromium w
 
 After packaging the application, run `npm --prefix frontend run e2e:smoke` from the repository root. Direct `node e2e/smoke.mjs` invocation must use `frontend` as its working directory. The smoke script launches its own Java process on port 18081 with a fresh temporary SQLite database and closes it after testing. It checks invoice finalization, corrections/replacement, exports, email copying, submission, payment, and responsive layouts.
 
-The assistant script targets a fresh isolated server at port 18082 by default, with `e2e-isolated-test-token-not-a-real-secret` as its fixed test token. Set `APP_ALLOWED_ORIGINS=https://example.test` on that server for the origin checks. Run it with `npm run e2e:assistant` from `frontend`. Use a disposable database, never the live database. Both scripts refuse a non-fresh initial entry count and need the fixed fixture token for externally supplied instances.
+The assistant script launches and stops its own isolated Java server on port 18082, using a fresh temporary SQLite database, disabled providers, and the fixed test token. Run it with `npm run e2e:assistant` from `frontend`. It checks saved correction messages, review enforcement, draft invoice/entry reuse, invoice previews, reload, timers, mobile layout, and origins. Both scripts support `E2E_JAR` for an alternative packaged jar. `E2E_BASE_URL` instead targets an externally managed disposable instance: configure the fixture token `e2e-isolated-test-token-not-a-real-secret`, and for assistant origin checks set `APP_ALLOWED_ORIGINS=https://example.test`. Both scripts refuse a non-fresh initial entry count. Never target the live database.
 
 CI provisions its own disposable database and bundled browser. It runs formatting, TypeScript, frontend tests/build, Maven verification, and both browser workflows. The Pages publishing workflow is separate and manually triggered.
 

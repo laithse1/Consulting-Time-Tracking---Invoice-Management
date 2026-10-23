@@ -28,7 +28,7 @@ Controllers do not access JDBC, repositories, or model-provider implementations.
 
 SQLite plus Spring JDBC was chosen for a local, inspectable database and explicit queries. There are no JPA entities; HTTP requests use typed DTOs and repositories return JDBC projections. `RequestMapper` adapts optional wire fields without inventing defaults. `RecordRepository` restricts dynamic table names to an allowlist; query values are bound parameters.
 
-Flyway owns schema history. V1 establishes clients, contracts, projects, work, weekly reviews, expenses, invoices, allocations, payments, historical receipts, and audit events. V2 adds composer drafts, assistant plans, and untimed-duplicate protection. Applied SQL files are excluded from formatting and must not be edited.
+Flyway owns schema history. V1 establishes clients, contracts, projects, work, weekly reviews, expenses, invoices, allocations, payments, historical receipts, and audit events. V2 adds composer drafts, assistant plans, and untimed-duplicate protection. V3 adds versioned conversation instructions, replies, and before/after plan snapshots. Applied SQL files are excluded from formatting and must not be edited.
 
 Invoice snapshots are immutable JSON documents. `JsonDocuments` reloads decimal JSON values as `BigDecimal`, preserving exact arithmetic rather than converting through binary floating point. Issued invoice rendering uses its stored snapshot; later contract/project edits do not rewrite historical contents.
 
@@ -39,6 +39,8 @@ A PostgreSQL migration would require adapting SQLite identity retrieval, DDL/mig
 Feature mutation methods carry `@Transactional`. Finalization validates, freezes the snapshot, allocates work/expenses uniquely, and handles linked replacement in one transaction. Payment events and their audit records share the same transaction. The singleton timer and one-connection SQLite pool serialize writes.
 
 Assistant network extraction happens outside a database transaction. Source notes are saved before parsing/network work. Proposal stores a versioned plan without ledger mutations. A review update checks/increments its version. Applying a confirmed plan executes its actions through feature services and stores the receipt in one transaction. Failure rolls back the batch; repeating an applied plan returns the stored receipt instead of repeating its financial actions.
+
+`AssistantRevisionService` interprets local corrections or requests provider suggestions outside a database transaction. `AssistantRevisionStore` checks the expected proposed version and atomically saves the plan and immutable revision snapshots. `AssistantReceiptService` reopens editable receipts, binds saved work/invoice IDs, and captures current entry baselines. Reapplication checks those baselines and allocation/snapshot restrictions before updating existing records. `AssistantReportingService` computes review values and reports using exact ledger arithmetic. Flyway V3 adds correction history without changing existing migrations or ledger records.
 
 An invoice draft is a mutable preview, not an issued document. Allocation happens only at explicit finalization. Editing an issued source record is blocked while allocated. Explicit withdrawal of an unpaid invoice preserves its snapshot and releases sources; finalizing the linked replacement marks the original Replaced. Paid invoices cannot use this correction flow because credit/refund accounting is outside the implementation.
 
@@ -59,6 +61,8 @@ The deterministic parser handles bounded facts and commands. Missing, estimated,
 The optional HTTP JSON provider client reads private profiles on each request, renders request/header templates, enforces endpoint/redirect/size/time limits, and validates returned source spans. All non-whitespace source—including signs and punctuation—must be covered by disjoint verbatim spans. Dates and durations are reparsed locally, and provider suggestions are always drafts. The provider gets no tools, SQL access, or financial approval capability.
 
 Profiles support compatible HTTP JSON APIs through configuration. Streaming, OAuth refresh, custom signing, and non-JSON protocols require adapter code. Credentials are not included in selector metadata or stored assistant history.
+
+Springdoc generates the OpenAPI JSON/YAML specifications and Swagger UI from controller mappings and request DTOs. `OpenApiConfiguration` declares the `localToken` HTTP bearer scheme. `API_DOCS_ENABLED` controls the documentation endpoints; the bearer filter independently protects `/api/**` operations. See the [Swagger route and runtime reference](api.md#swagger-and-openapi-urls).
 
 ## Frontend composition
 

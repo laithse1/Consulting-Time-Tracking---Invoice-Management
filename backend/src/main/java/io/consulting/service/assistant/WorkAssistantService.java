@@ -1,9 +1,6 @@
 package io.consulting.service.assistant;
 
-import static io.consulting.domain.DomainValues.charge;
-import static io.consulting.domain.DomainValues.hours;
 import static io.consulting.domain.DomainValues.integer;
-import static io.consulting.domain.DomainValues.money;
 import static io.consulting.domain.DomainValues.require;
 import static io.consulting.domain.DomainValues.text;
 
@@ -12,7 +9,6 @@ import io.consulting.domain.assistant.WorkDescriptionParser;
 import io.consulting.integration.ai.HttpJsonProviderClient;
 import io.consulting.repository.AssistantRepository;
 import io.consulting.service.WorkspaceService;
-import java.math.BigDecimal;
 import java.time.LocalDate;
 import java.util.ArrayList;
 import java.util.HashMap;
@@ -20,7 +16,6 @@ import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
-import java.util.TreeMap;
 import java.util.UUID;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -32,17 +27,23 @@ public class WorkAssistantService {
     private final AssistantRepository repository;
     private final HttpJsonProviderClient providers;
     private final ApplicationProperties properties;
+    private final AssistantReceiptService receipts;
+    private final AssistantReportingService reporting;
 
     public WorkAssistantService(
         WorkspaceService workspace,
         AssistantRepository repository,
         HttpJsonProviderClient providers,
-        ApplicationProperties properties
+        ApplicationProperties properties,
+        AssistantReceiptService receipts,
+        AssistantReportingService reporting
     ) {
         this.workspace = workspace;
         this.repository = repository;
         this.providers = providers;
         this.properties = properties;
+        this.receipts = receipts;
+        this.reporting = reporting;
     }
 
     public Map<String, Object> history(int contractId) {
@@ -77,11 +78,19 @@ public class WorkAssistantService {
         out.remove("plan_json");
         out.put(
             "results",
-            text(row, "results_json").isEmpty()
+            !text(row, "status").equals("applied") || text(row, "results_json").isEmpty()
                 ? List.of()
                 : workspace.decode(text(row, "results_json")).get("results")
         );
         out.remove("results_json");
+        out.put("revisions", repository.findRevisions(text(row, "id")));
+        out.put(
+            "review",
+            reporting.review(
+                integer(row, "contract_id"),
+                (List<Map<String, Object>>) out.get("actions")
+            )
+        );
         return out;
     }
 
@@ -122,27 +131,70 @@ public class WorkAssistantService {
             );
             actions = new ArrayList<>();
             for (var segment : providers.extract(engine, source, projects)) {
-                var action = WorkDescriptionParser.work(
+                var parsed = WorkDescriptionParser.parse(
                     segment.get("source"),
                     reference,
-                    null,
-                    null,
                     projects
                 );
-                if (integer(action, "project_id") == 0) projects
-                    .stream()
-                    .filter(p -> text(p, "name").equalsIgnoreCase(segment.get("project")))
-                    .findFirst()
-                    .ifPresent(p -> action.put("project_id", integer(p, "id")));
-                if (WorkDescriptionParser.CATEGORIES.contains(segment.get("category"))) action.put(
-                    "category",
-                    segment.get("category")
-                );
-                action.put("draft", 1);
-                action.put("provider_suggestion", true);
-                actions.add(action);
+                for (var action : parsed) {
+                    if (!text(action, "type").equals("log_work")) {
+                        actions.add(action);
+                        continue;
+                    }
+                    if (integer(action, "project_id") == 0) projects
+                        .stream()
+                        .filter(p -> text(p, "name").equalsIgnoreCase(segment.get("project")))
+                        .findFirst()
+                        .ifPresent(p -> action.put("project_id", integer(p, "id")));
+                    if (
+                        WorkDescriptionParser.CATEGORIES.contains(segment.get("category"))
+                    ) action.put("category", segment.get("category"));
+                    action.put("draft", 1);
+                    action.put("provider_suggestion", true);
+                    if (parsed.size() == 1 && !segment.get("description").isBlank()) {
+                        action.put("description", segment.get("description"));
+                        action.put("wording_suggestion", true);
+                    }
+                    actions.add(action);
+                }
             }
         }
+        if (
+            Boolean.TRUE.equals(command.get("prepare_invoice")) &&
+            actions.stream().anyMatch(a -> text(a, "type").equals("log_work")) &&
+            actions.stream().noneMatch(a -> text(a, "type").equals("draft_invoice"))
+        ) {
+            var from = LocalDate.parse(text(command, "period_start"));
+            var to = LocalDate.parse(text(command, "period_end"));
+            require(
+                !to.isBefore(from) && to.toEpochDay() - from.toEpochDay() <= 366,
+                "Invalid invoice period"
+            );
+            actions.add(
+                new LinkedHashMap<>(
+                    Map.of(
+                        "type",
+                        "draft_invoice",
+                        "description",
+                        "Prepare invoice from reviewed eligible work",
+                        "period_start",
+                        from.toString(),
+                        "period_end",
+                        to.toString(),
+                        "require_complete_work",
+                        true
+                    )
+                )
+            );
+        }
+        // Draft/report operations run after work entries even when mentioned first in the notes.
+        actions.sort(
+            java.util.Comparator.comparingInt(a ->
+                java.util.Set.of("draft_invoice", "report", "compliance").contains(text(a, "type"))
+                    ? 1
+                    : 0
+            )
+        );
         require(
             actions.size() <= properties.assistant().maxActions(),
             "Message exceeds the configured action limit"
@@ -195,11 +247,38 @@ public class WorkAssistantService {
         for (int i = 0; i < actions.size(); i++) {
             var a = actions.get(i);
             require(
+                !a.containsKey("skip") || a.get("skip") instanceof Boolean,
+                "Task inclusion must be a boolean"
+            );
+            for (String field : List.of("_entry_id", "_entry_baseline", "_invoice_id"))
+                require(
+                    java.util.Objects.equals(a.get(field), previous.get(i).get(field)),
+                    "Saved record references cannot be changed"
+                );
+            if (integer(a, "_invoice_id") > 0) for (String field : List.of(
+                "period_start",
+                "period_end"
+            ))
+                require(
+                    text(a, field).equals(text(previous.get(i), field)),
+                    "The saved invoice period cannot change. Create a new invoice draft for a different period."
+                );
+            require(
                 text(a, "type").equals(text(previous.get(i), "type")),
                 "Action type cannot be changed"
             );
-            require(workspace.encode(a).length() <= 20000, "Action is too large");
+            require(workspace.encode(a).length() <= 40000, "Action is too large");
             if (text(a, "type").equals("log_work")) {
+                if (a.get("seconds") == null) a.put("seconds", 0);
+                require(
+                    java.util.Set.of("0", "1").contains(text(a, "draft")) &&
+                        java.util.Set.of("0", "1").contains(text(a, "billable")),
+                    "Billing and draft flags must be 0 or 1"
+                );
+                require(
+                    text(a, "seconds").matches("\\d{1,5}"),
+                    "Actual duration must be an integer number of seconds"
+                );
                 require(
                     integer(a, "seconds") >= 0 && integer(a, "seconds") <= 86400,
                     "Actual duration must be between zero and 24 hours"
@@ -211,7 +290,14 @@ public class WorkAssistantService {
                 ) a.put("draft", 1);
             }
         }
-        repository.updatePlan(id, workspace.encode(Map.of("actions", actions)));
+        require(
+            repository.updateProposedPlan(
+                id,
+                integer(command, "version"),
+                workspace.encode(Map.of("actions", actions))
+            ),
+            "Plan changed in another window; reload it before applying"
+        );
         return unpack(planRow(id));
     }
 
@@ -232,18 +318,60 @@ public class WorkAssistantService {
             .decode(text(row, "plan_json"))
             .get("actions");
         var results = new ArrayList<Map<String, Object>>();
-        for (var a : actions) {
+        // Check saved targets before any mutations. All writes still share this transaction.
+        receipts.validateTargets(actions);
+        boolean preparingInvoice = actions
+            .stream()
+            .anyMatch(
+                a -> text(a, "type").equals("draft_invoice") && !Boolean.TRUE.equals(a.get("skip"))
+            );
+        if (preparingInvoice) for (var action : actions) {
+            if (
+                text(action, "type").equals("log_work") && !Boolean.TRUE.equals(action.get("skip"))
+            ) {
+                require(
+                    integer(action, "draft") == 0 &&
+                        !text(action, "work_date").isBlank() &&
+                        integer(action, "seconds") > 0 &&
+                        integer(action, "project_id") > 0,
+                    "Confirm the actual date, duration, and project for each task before preparing its invoice, or exclude that task."
+                );
+                if (integer(action, "billable") == 1) require(
+                    actions
+                        .stream()
+                        .anyMatch(
+                            invoice ->
+                                text(invoice, "type").equals("draft_invoice") &&
+                                !Boolean.TRUE.equals(invoice.get("skip")) &&
+                                !text(invoice, "period_start").isBlank() &&
+                                !text(invoice, "period_end").isBlank() &&
+                                text(action, "work_date").compareTo(
+                                    text(invoice, "period_start")
+                                ) >= 0 &&
+                                text(action, "work_date").compareTo(text(invoice, "period_end")) <=
+                                    0
+                        ),
+                    "A billable task falls outside the selected invoice period. Correct the period or exclude that task from this plan."
+                );
+            }
+        }
+        for (int actionIndex = 0; actionIndex < actions.size(); actionIndex++) {
+            var a = actions.get(actionIndex);
+            if (Boolean.TRUE.equals(a.get("skip")) && integer(a, "_entry_id") == 0) continue;
             String type = text(a, "type");
             var result = new LinkedHashMap<String, Object>();
             result.put("type", type);
+            result.put("action_index", actionIndex);
             switch (type) {
                 case "log_work" -> {
                     var entry = new HashMap<>(a);
                     entry.remove("id");
+                    if (integer(a, "_entry_id") > 0) entry.put("id", integer(a, "_entry_id"));
                     entry.put("contract_id", contractId);
                     entry.put(
                         "draft",
-                        text(a, "work_date").isEmpty() ||
+                        Boolean.TRUE.equals(a.get("skip")) ||
+                            text(a, "work_date").isEmpty() ||
                             integer(a, "seconds") == 0 ||
                             integer(a, "project_id") == 0
                             ? 1
@@ -272,10 +400,14 @@ public class WorkAssistantService {
                     command.put("contract_id", contractId);
                     command.put("adjustment", "0");
                     command.remove("replacement_for");
-                    var p = workspace.draft(command);
+                    var p =
+                        integer(a, "_invoice_id") > 0
+                            ? workspace.preview(integer(a, "_invoice_id"))
+                            : workspace.draft(command);
                     result.put("invoice", p.get("invoice"));
                     result.put("warnings", p.get("warnings"));
                     result.put("total", p.get("total"));
+                    result.put("preview", p);
                 }
                 case "report" -> result.put(
                     "report",
@@ -314,46 +446,10 @@ public class WorkAssistantService {
     }
 
     public Map<String, Object> report(int contractId, LocalDate from, LocalDate to) {
-        require(
-            !to.isBefore(from) && to.toEpochDay() - from.toEpochDay() <= 366,
-            "Report period must be at most 366 days"
-        );
-        var c = workspace.contract(contractId);
-        var rows = repository.findReportWork(
-            contractId,
-            new io.consulting.domain.WorkPeriod(from, to)
-        );
-        long actual = 0,
-            billable = 0;
-        BigDecimal amount = BigDecimal.ZERO;
-        var groups = new TreeMap<String, Long>();
-        for (var e : rows) {
-            actual += integer(e, "seconds");
-            groups.merge(text(e, "project"), (long) integer(e, "seconds"), Long::sum);
-            if (integer(e, "billable") == 1) {
-                billable += integer(e, "seconds");
-                amount = amount.add(charge(integer(e, "seconds"), money(c.get("rate"))));
-            }
-        }
-        return Map.of(
-            "from",
-            from.toString(),
-            "to",
-            to.toString(),
-            "actualHours",
-            hours(actual),
-            "billableHours",
-            hours(billable),
-            "servicesValue",
-            amount.setScale(2),
-            "projects",
-            groups
-                .entrySet()
-                .stream()
-                .map(e -> Map.of("project", e.getKey(), "hours", hours(e.getValue())))
-                .toList(),
-            "note",
-            "Value uses current contract rate and rounded work lines; issued invoices retain their own frozen rates."
-        );
+        return reporting.report(contractId, from, to);
+    }
+
+    public Map<String, Object> reopen(String id, int version) {
+        return unpack(receipts.reopen(id, version));
     }
 }

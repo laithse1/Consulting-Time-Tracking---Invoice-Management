@@ -14,6 +14,12 @@ export interface Action {
   period_end?: string;
   number?: string;
   reference?: string;
+  source_text?: string;
+  wording_suggestion?: boolean;
+  provider_suggestion?: boolean;
+  skip?: boolean;
+  _invoice_id?: number;
+  _entry_id?: number;
 }
 
 export interface Result {
@@ -21,6 +27,14 @@ export interface Result {
   entry?: Entry;
   invoice?: Invoice;
   warnings?: string[];
+  total?: number;
+  preview?: {
+    entries: Entry[];
+    hours: number;
+    subtotal: number;
+    expenseTotal: number;
+    total: number;
+  };
   report?: {
     actualHours: number;
     billableHours: number;
@@ -39,6 +53,14 @@ export interface Plan {
   version: number;
   created: string;
   engine: string;
+  revisions?: {
+    version: number;
+    instruction: string;
+    reply: string;
+    engine: string;
+    created: string;
+  }[];
+  review?: { hours: number; servicesValue: number; incompleteTasks: number; note: string };
   actions: Action[];
   results: Result[];
 }

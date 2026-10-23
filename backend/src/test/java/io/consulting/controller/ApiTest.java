@@ -53,6 +53,25 @@ class ApiTest {
     @MockitoBean
     io.consulting.service.assistant.WorkAssistantService assistant;
 
+    @MockitoBean
+    io.consulting.service.assistant.AssistantRevisionService revisions;
+
+    @Test
+    void correctionEndpointsRequireAuthenticationAndScalarMessages() throws Exception {
+        mvc.perform(
+            post("/api/assistant/plans/fixture/revise")
+                .contentType("application/json")
+                .content("{\"version\":1,\"instruction\":\"Task 1 duration: 90m\"}")
+        ).andExpect(status().isUnauthorized());
+        mvc.perform(
+            post("/api/assistant/plans/fixture/revise")
+                .header("Authorization", AUTHORIZATION)
+                .contentType("application/json")
+                .content("{\"version\":1,\"instruction\":{\"seconds\":999}}")
+        ).andExpect(status().isBadRequest());
+        verifyNoInteractions(revisions);
+    }
+
     @Test
     void rejectsMalformedAssistantActionsBeforeApplication() throws Exception {
         mvc.perform(

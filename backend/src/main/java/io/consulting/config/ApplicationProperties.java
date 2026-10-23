@@ -31,7 +31,8 @@ public record ApplicationProperties(
     public record Assistant(
         @DefaultValue("10000") @Min(100) @Max(10000) int maxSourceCharacters,
         @DefaultValue("30") @Min(1) @Max(30) int maxActions,
-        @DefaultValue("50") @Min(1) @Max(500) int historyLimit
+        @DefaultValue("50") @Min(1) @Max(500) int historyLimit,
+        @DefaultValue("30") @Min(1) @Max(100) int maxRevisions
     ) {}
 
     public record Provider(

@@ -116,3 +116,15 @@
     padding: 12px;
   }
 }
+.assistant-conversation {
+  border-top: 1px solid var(--line);
+  margin-top: 1.5rem;
+  padding-top: 1rem;
+}
+
+.assistant-turn {
+  border-left: 3px solid var(--line);
+  padding-left: 1rem;
+  margin: 1rem 0;
+  overflow-wrap: anywhere;
+}

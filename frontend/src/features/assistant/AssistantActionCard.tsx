@@ -15,6 +15,17 @@ export function AssistantActionCard({ action, index, projects, locked, onEdit }:
       <h3>
         {index + 1}. {titles[action.type] || action.type}
       </h3>
+      {action.source_text && (
+        <details>
+          <summary>Original work notes</summary>
+          <p className="assistant-original">{action.source_text}</p>
+        </details>
+      )}
+      {action.wording_suggestion && (
+        <p className="small muted">
+          Suggested invoice wording. Check that it accurately describes your work.
+        </p>
+      )}
       <fieldset disabled={locked}>
         {action.type === "log_work" || action.type === "start_timer" ? (
           <>
@@ -110,6 +121,14 @@ export function AssistantActionCard({ action, index, projects, locked, onEdit }:
                 <label className="assistant-check">
                   <input
                     type="checkbox"
+                    checked={!action.skip}
+                    onChange={(e) => onEdit(index, { skip: !e.target.checked })}
+                  />
+                  Include this task in the plan
+                </label>
+                <label className="assistant-check">
+                  <input
+                    type="checkbox"
                     checked={action.billable === 1}
                     onChange={(e) => onEdit(index, { billable: +e.target.checked })}
                   />
@@ -140,6 +159,7 @@ export function AssistantActionCard({ action, index, projects, locked, onEdit }:
               Period start
               <input
                 type="date"
+                disabled={!!action._invoice_id}
                 value={action.period_start}
                 onChange={(e) => onEdit(index, { period_start: e.target.value })}
               />
@@ -148,6 +168,7 @@ export function AssistantActionCard({ action, index, projects, locked, onEdit }:
               Period end
               <input
                 type="date"
+                disabled={!!action._invoice_id}
                 value={action.period_end}
                 onChange={(e) => onEdit(index, { period_end: e.target.value })}
               />

@@ -1,8 +1,28 @@
 # Verification record
 
-## Structured application release
+## Configuration and Swagger audit — October 22, 2026
 
-The refactored release was built and tested locally on Windows and in the Linux Docker build. The running local app is at **http://127.0.0.1:18080**. Port 8080 is unavailable on this workstation; the private root `.env` selects 18080.
+The private root `.env` was compared with the current `.env.example`. Fourteen missing optional settings were appended with their documented defaults, including `ASSISTANT_MAX_REVISIONS=30` and `API_DOCS_ENABLED=true`. Existing values, including the access token and selected port, were preserved. Optional settings already had backend/Compose defaults; making them explicit does not require new credentials.
+
+An isolated packaged backend on port 18083 verified Swagger UI, the Swagger shortcut redirect, JSON/YAML OpenAPI specifications, Swagger configuration, and the bundled OAuth redirect helper. With documentation enabled, the shortcut returned HTTP 302 and the other five routes returned HTTP 200. With documentation disabled, all six returned HTTP 404. In both modes, `/api/state` returned 401 without authentication and 200 with the fixture token. The generated specification included the assistant correction/reopen endpoints and the HTTP bearer security scheme. Temporary processes were stopped; the live database and main app were not used.
+
+The README and API, configuration, development, operations, architecture, and assistant guides were reconciled with the current settings, authentication, migration history, and workflow. The API guide lists the full Swagger URLs, runtime-specific base addresses, authorization instructions, documentation toggle, and troubleshooting. Documentation formatting, local links, and Mermaid parsing were checked separately from the application test runs recorded below.
+
+## Conversational invoice workflow — October 22, 2026
+
+The conversational workflow was verified with 54 passing backend tests (one optional PDF sample generator skipped), 10 passing frontend tests, strict TypeScript checks, a production frontend build, Maven packaging, and repository formatting checks. All five documentation Mermaid diagrams parse successfully.
+
+New backend coverage includes professional wording proposals, preserved commands, correction consent/version checks, clarification without partial changes, rejection of fabricated time and financial actions, invoice-period coverage, saved draft reopening, stale record protection, excluding/reincluding work without changing task identity, invoice reuse, and corrected descriptions in exports. Provider HTTP/template tests use a local fixture and mocked responses; paid/live model quality was not evaluated.
+
+Both browser workflows passed in headless Chrome against separate disposable SQLite files. The assistant workflow corrected a saved two-hour task to 90 minutes, refreshed the invoice preview to 2.00 billable hours/$150.00 including its other half-hour task, retained nine total work entries and one invoice, and restored correction history after reload. Mobile layout and JavaScript error checks passed. The manual workflow continued to cover finalization, withdrawal/replacement, exports, email preparation, submission, and payments.
+
+The V2-to-V3 upgrade test created an existing database with composer notes and an applied receipt, applied only V3, compared all 15 pre-existing business tables, and verified `PRAGMA integrity_check = ok`. Existing migration files were unchanged. The live database was not opened or migrated during this development work. The main Docker app remains stopped; temporary browser servers were stopped after their tests. Rebuild the app when ready to run the new version.
+
+The new correction screenshot in `docs/images/assistant-corrections.png` was captured from the isolated browser fixture and visually inspected. GitHub Actions and live external providers were not run in this session.
+
+## Previous structured application release
+
+The earlier refactored release was built and tested locally on Windows and in the Linux Docker build. It was deployed at **http://127.0.0.1:18080** and subsequently stopped at the user's request. Port 8080 is unavailable on this workstation; the private root `.env` selects 18080. The evidence below describes that earlier deployment.
 
 | Check                      | Executed result                                                                                                                                                                                                  |
 | -------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |

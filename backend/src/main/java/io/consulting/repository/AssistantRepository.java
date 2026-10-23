@@ -90,6 +90,70 @@ public class AssistantRepository {
         );
     }
 
+    public boolean updateProposedPlan(String id, int version, String document) {
+        return (
+            jdbc.update(
+                "UPDATE assistant_plans SET plan_json=?,version=version+1 WHERE id=? AND version=? AND status='proposed'",
+                document,
+                id,
+                version
+            ) == 1
+        );
+    }
+
+    public List<Map<String, Object>> findRevisions(String id) {
+        return jdbc.queryForList(
+            "SELECT version,instruction,engine,reply,created FROM assistant_revisions WHERE plan_id=? ORDER BY version",
+            id
+        );
+    }
+
+    public void saveRevision(
+        String id,
+        int version,
+        String instruction,
+        String engine,
+        String reply,
+        String before,
+        String after
+    ) {
+        jdbc.update(
+            """
+            INSERT INTO assistant_revisions(plan_id,version,instruction,engine,reply,before_json,after_json,created)
+            VALUES(?,?,?,?,?,?,?,?)
+            """,
+            id,
+            version,
+            instruction,
+            engine,
+            reply,
+            before,
+            after,
+            Instant.now().toString()
+        );
+    }
+
+    public boolean reopenPlan(String id, int version, String document) {
+        return (
+            jdbc.update(
+                "UPDATE assistant_plans SET status='proposed',plan_json=?,version=version+1 WHERE id=? AND version=? AND results_json IS NOT NULL",
+                document,
+                id,
+                version
+            ) == 1
+        );
+    }
+
+    public boolean isEntryAllocated(int id) {
+        return (
+            jdbc.queryForObject(
+                "SELECT count(*) FROM allocations WHERE entry_id=?",
+                Integer.class,
+                id
+            ) > 0
+        );
+    }
+
     public List<Map<String, Object>> findTimerOwner() {
         return jdbc.queryForList("SELECT contract_id FROM timer");
     }

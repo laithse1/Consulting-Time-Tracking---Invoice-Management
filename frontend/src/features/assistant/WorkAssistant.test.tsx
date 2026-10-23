@@ -64,6 +64,8 @@ it("restores notes and requires an explicit plan confirmation before applying", 
     name: "Apply reviewed plan",
   });
   expect(apply).toBeDisabled();
+  const proposedRequest = fetcher.mock.calls.find(([url]) => url.endsWith("/plan"));
+  expect(JSON.parse(String(proposedRequest?.[1]?.body))).toMatchObject({ prepare_invoice: true });
   expect(fetcher.mock.calls.some(([url]) => url.endsWith("/apply"))).toBe(false);
   fireEvent.click(screen.getByLabelText("Confirm reviewed action plan"));
   fireEvent.click(apply);

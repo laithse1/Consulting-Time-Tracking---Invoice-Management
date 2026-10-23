@@ -1,7 +1,47 @@
 import { chromium, expect } from "@playwright/test";
 import { resolve } from "node:path";
+import { spawn } from "node:child_process";
+import { mkdir, writeFile } from "node:fs/promises";
+import { randomUUID } from "node:crypto";
 const base = process.env.E2E_BASE_URL || "http://127.0.0.1:18082";
 const token = "e2e-isolated-test-token-not-a-real-secret";
+const root = resolve("..");
+await mkdir(resolve(root, "tmp"), { recursive: true });
+const java = process.env.JAVA_HOME
+  ? resolve(process.env.JAVA_HOME, "bin", process.platform === "win32" ? "java.exe" : "java")
+  : "java";
+const server = process.env.E2E_BASE_URL
+  ? undefined
+  : spawn(
+      java,
+      [
+        "-jar",
+        process.env.E2E_JAR || resolve(root, "backend/target/invoice-manager-1.0.0.jar"),
+        "--debug=false",
+        "--logging.level.root=WARN",
+      ],
+      {
+        cwd: root,
+        windowsHide: true,
+        stdio: ["ignore", "pipe", "pipe"],
+        env: {
+          ...process.env,
+          APP_PORT: "18082",
+          BIND_ADDRESS: "127.0.0.1",
+          APP_TOKEN: token,
+          DB_PATH: resolve(root, "tmp", `assistant-e2e-${randomUUID()}.db`),
+          ASSISTANT_PROVIDER_CONFIG: resolve(root, "tmp", "no-test-provider.json"),
+          APP_ALLOWED_ORIGINS: "https://example.test",
+        },
+      },
+    );
+let logs = "";
+server?.stdout.on("data", (data) => {
+  logs += data;
+});
+server?.stderr.on("data", (data) => {
+  logs += data;
+});
 async function api(path, body) {
   const response = await fetch(base + "/api" + path, {
     method: body === undefined ? "GET" : "POST",
@@ -11,14 +51,15 @@ async function api(path, body) {
   if (!response.ok) throw Error(path + ": " + (await response.text()));
   return response.json().catch(() => undefined);
 }
-const browser = await chromium.launch({
-  channel:
-    process.env.E2E_BROWSER_CHANNEL === "bundled"
-      ? undefined
-      : process.env.E2E_BROWSER_CHANNEL || "chrome",
-  headless: true,
-});
+let browser;
 try {
+  browser = await chromium.launch({
+    channel:
+      process.env.E2E_BROWSER_CHANNEL === "bundled"
+        ? undefined
+        : process.env.E2E_BROWSER_CHANNEL || "chrome",
+    headless: true,
+  });
   let ready = false;
   for (let i = 0; i < 60; i++) {
     try {
@@ -70,6 +111,28 @@ try {
   await page.getByRole("button", { name: "Review invoice" }).click();
   await expect(page.getByRole("heading", { name: state.invoices[0].number })).toBeVisible();
   await page.getByRole("button", { name: "Work Assistant", exact: true }).click();
+  await page.getByRole("button", { name: /2026-09-15: Spent 2h/ }).click();
+  await page.getByRole("button", { name: "Revise saved draft" }).click();
+  await page.getByLabel("Correction message").fill("Task 1 duration: 90m");
+  await page.getByRole("button", { name: "Propose correction" }).click();
+  await expect(page.getByText(/Updated 1 task/)).toBeVisible();
+  expect((await api("/state")).entries).toHaveLength(9);
+  const firstTask = page.locator(".assistant-action").first();
+  await expect(firstTask.getByLabel("Actual duration (hours)")).toHaveValue("1.5");
+  await firstTask.getByLabel(/This is completed work/).check();
+  await page.getByLabel("Confirm reviewed action plan").check();
+  await page.getByRole("button", { name: "Apply reviewed plan" }).click();
+  await expect(page.getByText("Plan applied. Saved records are shown below.")).toBeVisible();
+  expect((await api("/state")).entries).toHaveLength(9);
+  expect((await api("/state")).invoices).toHaveLength(1);
+  await expect(page.getByText(/2.00 billable hours/)).toBeVisible();
+  await page
+    .locator(".assistant-conversation")
+    .screenshot({ path: resolve("../docs/images/assistant-corrections.png") });
+  await page.reload();
+  await page.getByRole("button", { name: "Work Assistant", exact: true }).click();
+  await page.getByRole("button", { name: /2026-09-15: Spent 2h/ }).click();
+  await expect(page.getByText(/Task 1 duration: 90m/).last()).toBeVisible();
   await page.setViewportSize({ width: 390, height: 844 });
   await expect(page.getByLabel("Work description", { exact: true })).toBeVisible();
   expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
@@ -109,8 +172,12 @@ try {
   expect(afterTimer.entries).toHaveLength(10);
   expect(afterTimer.entries.at(-1).draft).toBe(1);
   console.log(
-    "Assistant browser workflow passed: local parsing, autosave, reviewed atomic apply, invoice draft, exact report, retry safety, reload, mobile, and CORS.",
+    "Assistant browser workflow passed: local parsing, autosave, atomic apply, invoice preview, saved corrections, draft invoice reuse, exact reports, retry safety, reload, mobile, and CORS.",
   );
+} catch (error) {
+  await writeFile(resolve(root, "tmp", "assistant-e2e-server.log"), logs);
+  throw error;
 } finally {
-  await browser.close();
+  await browser?.close();
+  server?.kill();
 }

@@ -70,3 +70,4 @@ jobs:
           path: |
             backend/target/surefire-reports/
             tmp/e2e-server.log
+            tmp/assistant-e2e-server.log

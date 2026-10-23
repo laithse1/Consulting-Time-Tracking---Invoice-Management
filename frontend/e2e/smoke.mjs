@@ -22,7 +22,11 @@ const process = externalBase
   ? undefined
   : spawn(
       java,
-      ["-jar", resolve(root, "backend/target/invoice-manager-1.0.0.jar"), "--debug=false"],
+      [
+        "-jar",
+        globalThis.process.env.E2E_JAR || resolve(root, "backend/target/invoice-manager-1.0.0.jar"),
+        "--debug=false",
+      ],
       {
         cwd: root,
         env: {

@@ -18,6 +18,32 @@ class HttpJsonProviderClientTest {
     Path directory;
 
     @Test
+    void userTextCannotExpandProviderTemplatePlaceholders() throws Exception {
+        var json = new ObjectMapper();
+        var client = new HttpJsonProviderClient(json, directory.resolve("unused.json").toString());
+        var profile = json.readTree(
+            "{\"model\":\"configured-model\",\"credentials\":{\"KEY\":\"private-fixture\"}}"
+        );
+        String literal = "Worked on {{model}} and {{instructions}}; {{secret:KEY}}";
+        assertEquals(
+            literal,
+            client
+                .render(
+                    json.getNodeFactory().textNode("{{input}}"),
+                    profile,
+                    Map.of("input", literal, "instructions", "trusted instructions")
+                )
+                .asText()
+        );
+        assertEquals(
+            "private-fixture",
+            client
+                .render(json.getNodeFactory().textNode("{{secret:KEY}}"), profile, Map.of())
+                .asText()
+        );
+    }
+
+    @Test
     void configAdapterValidatesVerbatimCoverageAndHidesCredentials() throws Exception {
         var response = new AtomicReference<>(
             "{\"segments\":[{\"source\":\"Today 2h testing Audiom\",\"project\":\"Audiom\",\"category\":\"Testing and Debugging\"}]}"
@@ -69,6 +95,22 @@ class HttpJsonProviderClientTest {
             var providers = new HttpJsonProviderClient(json, path.toString());
             assertFalse(providers.available().toString().contains("fixture-secret"));
             assertEquals(1, providers.extract("test", "Today 2h testing Audiom", List.of()).size());
+            response.set(
+                "{\"segments\":[{\"source\":\"Today 2h testing Audiom\",\"description\":\"Tested Audiom.\"}]}"
+            );
+            assertEquals(
+                "Tested Audiom.",
+                providers
+                    .extract("test", "Today 2h testing Audiom", List.of())
+                    .getFirst()
+                    .get("description")
+            );
+            response.set("{\"changes\":[{\"task\":1,\"description\":\"Audiom testing.\"}]}");
+            assertEquals(
+                1,
+                providers.revise("test", "A reviewed plan and correction").path("changes").size()
+            );
+            response.set("{\"segments\":[{\"source\":\"Today 2h testing Audiom\"}]}");
             assertEquals("Bearer fixture-secret-never-exposed", authorization.get());
             assertThrows(RuntimeException.class, () ->
                 providers.extract("test", "-Today 2h testing Audiom", List.of())

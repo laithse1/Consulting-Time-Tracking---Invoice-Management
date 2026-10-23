@@ -1,7 +1,8 @@
-import { ArrowUpRight, Check, MessageSquare } from "lucide-react";
+import { ArrowUpRight, MessageSquare } from "lucide-react";
 import { request } from "@/lib/api/client";
-import { AssistantActionCard } from "./AssistantActionCard";
-import { AssistantResultCard } from "./AssistantResultCard";
+import { AssistantPlanPanel } from "./AssistantPlanPanel";
+import { useState } from "react";
+import { today, monthEnd } from "@/lib/dates";
 import type { Plan } from "./types";
 import { useWorkAssistant } from "./useWorkAssistant";
 import type { State } from "@/types";
@@ -17,6 +18,7 @@ export default function WorkAssistant({
   onRefresh: () => Promise<void>;
   onInvoice: (id: number) => void;
 }) {
+  const assistant = useWorkAssistant(data, cid);
   const {
     sourceLimit,
     history,
@@ -31,20 +33,21 @@ export default function WorkAssistant({
     setConsent,
     plan,
     setPlan,
-    confirmed,
     setConfirmed,
     busy,
     error,
     setError,
     saveState,
     setSaveState,
-    projects,
     save,
     run,
     reload,
-    edit,
-    locked,
-  } = useWorkAssistant(data, cid);
+  } = assistant;
+  const [prepareInvoice, setPrepareInvoice] = useState(true);
+  const [periodStart, setPeriodStart] = useState(today().slice(0, 7) + "-01");
+  const [periodEnd, setPeriodEnd] = useState(
+    today().slice(0, 7) + "-" + monthEnd(today().slice(0, 7)),
+  );
   return (
     <div className="assistant-layout">
       <section className="panel assistant-composer">
@@ -57,7 +60,9 @@ export default function WorkAssistant({
         </div>
         <p className="muted">
           Describe completed work, then review one plan to log time, prepare invoices, and generate
-          reports. Include actual dates, durations, and project names.
+          reports. Include actual dates, durations, and project names. A configured language
+          provider can suggest professional invoice wording; local rules provide basic cleanup
+          offline.
         </p>
         <label className="field">
           Work description
@@ -122,6 +127,39 @@ export default function WorkAssistant({
             review its draft suggestions.
           </label>
         )}
+        <label className="assistant-check">
+          <input
+            type="checkbox"
+            checked={prepareInvoice}
+            disabled={busy}
+            onChange={(event) => setPrepareInvoice(event.target.checked)}
+          />
+          Prepare an invoice after logging the reviewed work
+        </label>
+        {prepareInvoice && (
+          <div className="form-grid">
+            <label className="field">
+              Invoice period start
+              <input
+                aria-label="Invoice period start"
+                type="date"
+                value={periodStart}
+                disabled={busy}
+                onChange={(event) => setPeriodStart(event.target.value)}
+              />
+            </label>
+            <label className="field">
+              Invoice period end
+              <input
+                aria-label="Invoice period end"
+                type="date"
+                value={periodEnd}
+                disabled={busy}
+                onChange={(event) => setPeriodEnd(event.target.value)}
+              />
+            </label>
+          </div>
+        )}
         <button
           className="btn"
           disabled={!source.trim() || !reference || busy || !history || (!!provider && !consent)}
@@ -136,6 +174,9 @@ export default function WorkAssistant({
                 reference_date: reference,
                 provider_id: provider,
                 provider_consent: consent,
+                prepare_invoice: prepareInvoice,
+                period_start: periodStart,
+                period_end: periodEnd,
               });
               setPlan(next);
               setConfirmed(false);
@@ -183,89 +224,7 @@ export default function WorkAssistant({
           </button>
         </div>
       )}
-      {plan && (
-        <section className="panel assistant-plan">
-          <div className="section-head">
-            <div>
-              <span className="eyebrow">
-                {plan.status === "applied" ? "SAVED RECEIPT" : "REVIEW BEFORE APPLYING"}
-              </span>
-              <h2>
-                {plan.actions.length} proposed action
-                {plan.actions.length === 1 ? "" : "s"}
-              </h2>
-            </div>
-            <span className="badge">{plan.engine}</span>
-          </div>
-          {plan.source !== source && (
-            <details>
-              <summary>Original message for this plan</summary>
-              <pre className="assistant-original">{plan.source}</pre>
-            </details>
-          )}
-          {plan.actions.map((a, index) => (
-            <AssistantActionCard
-              key={index}
-              action={a}
-              index={index}
-              projects={projects}
-              locked={locked}
-              onEdit={edit}
-            />
-          ))}
-          {plan.status !== "applied" ? (
-            <>
-              <label className="assistant-check">
-                <input
-                  type="checkbox"
-                  aria-label="Confirm reviewed action plan"
-                  checked={confirmed}
-                  onChange={(e) => setConfirmed(e.target.checked)}
-                  disabled={busy}
-                />
-                I reviewed this plan and confirm the facts. Apply these actions to the active
-                contract.
-              </label>
-              <button
-                className="btn"
-                disabled={busy || !confirmed}
-                onClick={() =>
-                  run(async () => {
-                    const savedPlan = await request<Plan>(
-                      `/assistant/plans/${plan.id}`,
-                      { version: plan.version, actions: plan.actions },
-                      "PUT",
-                    );
-                    setPlan(savedPlan);
-                    const applied = await request<Plan>(`/assistant/plans/${plan.id}/apply`, {
-                      version: savedPlan.version,
-                      confirmed: true,
-                    });
-                    setPlan(applied);
-                    setConfirmed(false);
-                    await reload(applied);
-                    await onRefresh();
-                  })
-                }
-              >
-                <Check size={16} />
-                {busy ? "Applying…" : "Apply reviewed plan"}
-              </button>
-              <p className="small muted">
-                The entire plan saves together. Retrying an applied plan returns its saved receipt.
-              </p>
-            </>
-          ) : (
-            <div className="notice">
-              <Check size={16} />
-              Plan applied. Saved records are shown below.
-            </div>
-          )}
-          {plan.results?.map((r, i) => (
-            <AssistantResultCard key={i} result={r} onInvoice={onInvoice} />
-          ))}
-        </section>
-      )}
+      <AssistantPlanPanel assistant={assistant} onRefresh={onRefresh} onInvoice={onInvoice} />
       {!!history?.plans.length && (
         <section className="panel">
           <h2>Saved conversations</h2>

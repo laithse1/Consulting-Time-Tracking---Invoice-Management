@@ -226,6 +226,19 @@ public class WorkDescriptionParser {
         var dates = ISO.matcher(line);
         var uniqueDates = new HashSet<String>();
         while (dates.find()) uniqueDates.add(dates.group(1));
+        var namedDates = Pattern.compile(
+            "(?i)\\b([a-z]{3,9})\\s+(\\d{1,2})(?:st|nd|rd|th)?[,]?\\s+(\\d{4})\\b"
+        ).matcher(line);
+        while (namedDates.find())
+            try {
+                uniqueDates.add(
+                    LocalDate.of(
+                        Integer.parseInt(namedDates.group(3)),
+                        month(namedDates.group(1)),
+                        Integer.parseInt(namedDates.group(2))
+                    ).toString()
+                );
+            } catch (DateTimeException | IllegalArgumentException ignored) {}
         if (Pattern.compile("(?i)\\btoday\\b").matcher(line).find()) uniqueDates.add(
             reference.toString()
         );
@@ -252,7 +265,8 @@ public class WorkDescriptionParser {
         ).matcher(line);
         while (urls.find()) refs.add(urls.group());
         out.put("type", "log_work");
-        out.put("description", line);
+        out.put("description", WorkDescriptionFormatter.format(line));
+        out.put("source_text", line);
         out.put("work_date", d == null ? "" : d.toString());
         out.put("seconds", seconds);
         out.put("start_time", start);
