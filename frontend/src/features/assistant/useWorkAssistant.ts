@@ -29,6 +29,9 @@ export function useWorkAssistant(data: State, cid: number) {
         setHistory(h);
         setSource(h.draft.source);
         setSaved(h.draft.source);
+        // The first ready profile is the configured default. Sending still requires consent.
+        setProvider(h.providers.find((candidate) => candidate.configured)?.id ?? "");
+        setConsent(false);
       })
       .catch((e) => active && setError(e.message));
     return () => {

@@ -1,6 +1,27 @@
 # REST API
 
+Conversation deletion: `DELETE /api/assistant/plans/{id}?confirmed=true&version=3` requires explicit confirmation and the conversation's current version. It removes proposed or applied conversations from recent history and records an audit event. Repeating a successful deletion is safe. Stale versions or missing plans are rejected without changes. This is soft deletion: source messages, revisions, receipts, ledger records, and invoice review safeguards remain in SQLite. Direct plan loading returns `deleted_at` for retained review through invoice links; correction workflows remain available. Composer drafts are separate and are not cleared.
+
 All `/api/**` routes require `Authorization: Bearer <APP_TOKEN>`. Requests/responses use JSON except downloads. Errors include HTTP 400 (invalid input/operation), 401 (missing/incorrect token), 403 (rejected origin), and 409 (database constraint conflict).
+
+## Invoice drafts and record lifecycle
+
+The lifecycle endpoints below are also listed in the generated Swagger UI:
+
+| Method | Path                                                   | Purpose                                                                                                                                                          |
+| ------ | ------------------------------------------------------ | ---------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| GET    | `/api/assistant/plans/{id}`                            | Load one saved plan directly, beyond the recent-history window                                                                                                   |
+| POST   | `/api/assistant/plans/{id}/invoice`                    | `{version,period_start,period_end}` creates or opens a draft bound to a proposed or applied plan, without replaying or confirming work; returns `{plan,preview}` |
+| PUT    | `/api/invoices/{id}`                                   | Edit an unfinalized draft using `{expected_token,period_start,period_end,invoice_date,presentation,adjustment,adjustment_reason,adjustment_approval,notes}`      |
+| DELETE | `/api/invoices/{id}?confirmed=true&expected_token=...` | Remove a draft from active lists while retaining its number and audit identity; work/expenses remain                                                             |
+| DELETE | `/api/expenses/{id}?confirmed=true`                    | Delete an unallocated expense and record its prior contents in audit                                                                                             |
+| POST   | `/api/records/{type}/{id}/archive`                     | `{archived,confirmed:true}` archives/restores `clients`, `contracts`, or `projects`; `archived` is a boolean                                                     |
+
+Draft previews include `edit_token`, `pendingWork`, `plannedWork`, and linked `assistantPlans`. Pass the latest `edit_token` when editing/deleting; stale tokens are rejected. Invoice numbers and contracts cannot be reassigned through draft edits. Period changes synchronize linked plans and increment their versions, so stale plan edits also require a reload. Positive adjustments still require documented reason and approval.
+
+An early linked invoice cannot be finalized while the plan is proposed, included work remains incomplete, or required billing questions are unresolved. Pending/planned rows are review context, never additional billable lines. Deleted invoices cannot be previewed, exported, finalized, or resurrected by an old plan; a new draft receives a new number. Issued invoices retain their existing correction workflow.
+
+State responses annotate clients/contracts/projects with `archived` (effective state, including the parent client) and `archived_self` (explicit archive). Archiving blocks new work, timers, expenses, and new children as applicable, but preserves historical review, corrections to existing records, invoice settlement, and restoration. Records with an active timer cannot be archived. Archive requests are idempotent in state and audited.
 
 ## Swagger and OpenAPI URLs
 
@@ -75,19 +96,25 @@ Entry payload: `id?`, `contract_id`, `project_id`, `work_date` (nullable for dra
 
 These endpoints use the same bearer authentication.
 
-| Method | Path                             | Purpose                                                                                                                                                           |
-| ------ | -------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| GET    | /api/assistant?contract=1        | Saved composer draft, configured recent plans/receipts and input limits, nonsecret provider metadata                                                              |
-| POST   | /api/assistant/draft             | Persist `{contract_id,source}`                                                                                                                                    |
-| POST   | /api/assistant/plan              | Persist source and propose `{contract_id,source,reference_date,provider_id?,provider_consent?,prepare_invoice?,period_start?,period_end?}` without ledger changes |
-| PUT    | /api/assistant/plans/{id}        | Review `{version,actions}`; preserves action count/type, increments version                                                                                       |
-| POST   | /api/assistant/plans/{id}/apply  | `{version,confirmed:true}` applies the batch atomically; repeating an applied plan returns the stored receipt                                                     |
-| POST   | /api/assistant/plans/{id}/revise | `{version,instruction,provider_id?,provider_consent?}` proposes existing work-task edits and stores a versioned correction/reply without ledger writes            |
-| POST   | /api/assistant/plans/{id}/reopen | `{version}` reopens editable saved work/invoice receipts and binds subsequent application to existing IDs                                                         |
+| Method | Path                             | Purpose                                                                                                                                                                       |
+| ------ | -------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| GET    | /api/assistant?contract=1        | Saved composer draft, configured recent plans/receipts and input limits, nonsecret provider metadata                                                                          |
+| POST   | /api/assistant/draft             | Persist `{contract_id,source}`                                                                                                                                                |
+| POST   | /api/assistant/plan              | Persist source and propose `{contract_id,source,reference_date,provider_id?,provider_consent?,input_mode?,prepare_invoice?,period_start?,period_end?}` without ledger changes |
+| PUT    | /api/assistant/plans/{id}        | Review `{version,actions}`; preserves action count/type, increments version                                                                                                   |
+| POST   | /api/assistant/plans/{id}/apply  | `{version,confirmed:true}` applies the batch atomically; repeating an applied plan returns the stored receipt                                                                 |
+| POST   | /api/assistant/plans/{id}/revise | `{version,instruction,provider_id?,provider_consent?}` proposes existing work-task edits and stores a versioned correction/reply without ledger writes                        |
+| POST   | /api/assistant/plans/{id}/reopen | `{version}` reopens editable saved work/invoice receipts and binds subsequent application to existing IDs                                                                     |
+
+`POST /api/assistant/plans/{id}/split` accepts `{version,action_index}` and appends a blank daily portion of an unsaved work task. The index is zero-based; optimistic version checking and the configured action limit apply. It never copies ledger bindings or proposed hours and performs no ledger writes.
+
+Explicit allocation tables are processed locally before provider extraction. Actions expose `proposed_hours` (decimal string), `allocation_start`, `allocation_end`, and `work_state` (`proposed`, `planned`, or `performed_unconfirmed`). These are source metadata and must be round-tripped unchanged, as must `source_text` and `requires_resolution`. Billing-question notes expose an editable boolean `resolved`; invoice preparation is rejected while any required question is unresolved. Changing a note to work cannot bypass this restriction. Explicit invoice ranges are preserved; month-only commands retain calendar-month behavior. Confirmed dates after the plan reference date are rejected atomically. See the [allocation workflow](work-assistant.md#proposed-work-tables-and-billing-questions).
 
 The assistant permits work logging, timer controls, invoice drafting, reports, weekly compliance review, and preparation of an existing invoice's email. It does not permit payment/status changes, finalization, or email sending. Provider requests occur outside database transactions and require explicit consent. Source is saved before parsing/network extraction so provider failures do not discard notes. See `docs/work-assistant.md` for the grammar and provider configuration.
 
 Plan responses include `revisions` (saved instructions, replies, versions, engine, timestamps) and a server-calculated `review` summary. Actions may contain `source_text`, `wording_suggestion`, and `skip`. Internal `_entry_id`, `_entry_baseline`, and `_invoice_id` fields on reopened plans must be round-tripped unchanged; clients cannot bind arbitrary records. Invoice results include the full `preview`. Reopened plans retain the previous stored receipt but hide results in the response until reapplied. Invoice period changes require a new draft rather than altering a bound invoice.
+
+For local processing, `input_mode` is `auto` (default), `lines`, or `narrative`. Automatic mode retains oversized inputs as a `save_note` action, including when an automatic invoice would exceed the configured budget. Explicit narrative mode never executes embedded commands. Applying `save_note` persists a conversation receipt and returns `note` text without creating ledger records. Providers may return `context` source segments, also represented as note actions. Work segments represent logical work items rather than source lines. Notes-only plans do not add an automatic invoice.
 
 Stored financial amounts and request amounts use decimal strings; computed responses are serialized from exact BigDecimal values. Clients must not replace authoritative backend arithmetic with binary floating-point calculations. Every invoice uses a unique sequential number within its start month. Finalization, allocation and replacement are a single database transaction. Monetary adjustment approval is supplied explicitly, independently from weekly acknowledgement. API state changes and prior entry versions are recorded in `audit`.
 

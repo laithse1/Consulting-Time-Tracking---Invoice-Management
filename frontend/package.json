@@ -11,7 +11,8 @@
     "format": "node node_modules/prettier/bin/prettier.cjs --ignore-path ../.prettierignore --write \"src/**/*.{ts,tsx,css}\" \"e2e/**/*.mjs\" \"*.json\" \"*.ts\" \"../backend/src/**/*.java\" \"../backend/src/**/*.yml\" \"../*.{md,json,yml,yaml}\" \"../.prettierrc.json\" \"../docs/*.md\" \"../config/*.example.json\" \"../.github/**/*.yml\"",
     "format:check": "node node_modules/prettier/bin/prettier.cjs --ignore-path ../.prettierignore --check \"src/**/*.{ts,tsx,css}\" \"e2e/**/*.mjs\" \"*.json\" \"*.ts\" \"../backend/src/**/*.java\" \"../backend/src/**/*.yml\" \"../*.{md,json,yml,yaml}\" \"../.prettierrc.json\" \"../docs/*.md\" \"../config/*.example.json\" \"../.github/**/*.yml\"",
     "e2e:smoke": "node e2e/smoke.mjs",
-    "e2e:assistant": "node e2e/assistant.mjs"
+    "e2e:assistant": "node e2e/assistant.mjs",
+    "e2e:lifecycle": "node e2e/draft-lifecycle.mjs"
   },
   "dependencies": {
     "@radix-ui/react-dialog": "^1.1.15",

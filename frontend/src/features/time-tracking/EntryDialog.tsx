@@ -5,23 +5,23 @@ import { Button } from "@/components/ui/Button";
 import { Input } from "@/components/ui/Input";
 import { Modal } from "@/components/ui/Modal";
 import { formData } from "@/lib/forms";
+import type { Preview } from "@/types";
 export function EntryDialog() {
-  const { edit, setModal, act, cid, projects } = useWorkspaceData();
+  const { edit, setModal, act, cid, projects, selected, setSelected } = useWorkspaceData();
   return (
     <Modal title={edit ? "Review work entry" : "Log work"} onClose={() => setModal("")}>
       <form
         onSubmit={(e) => {
           const b = formData(e);
-          act(
-            () =>
-              request("/entries", {
-                ...b,
-                id: edit?.id || 0,
-                contract_id: cid,
-                seconds: Math.round(Number(b.hours) * 3600),
-              }),
-            "Work entry saved",
-          );
+          act(async () => {
+            await request("/entries", {
+              ...b,
+              id: edit?.id || 0,
+              contract_id: cid,
+              seconds: Math.round(Number(b.hours) * 3600),
+            });
+            if (selected) setSelected(await request<Preview>(`/invoices/${selected.invoice.id}`));
+          }, "Work entry saved");
         }}
       >
         <div className="form-grid">
@@ -40,11 +40,13 @@ export function EntryDialog() {
             Project
             <select name="project_id" defaultValue={edit?.project_id || ""}>
               <option value="">Select project</option>
-              {projects.map((p) => (
-                <option key={p.id} value={p.id}>
-                  {p.name}
-                </option>
-              ))}
+              {projects
+                .filter((p) => !p.archived || p.id === edit?.project_id)
+                .map((p) => (
+                  <option key={p.id} value={p.id}>
+                    {p.name}
+                  </option>
+                ))}
             </select>
           </label>
           <label className="field">
@@ -93,10 +95,11 @@ export function EntryDialog() {
               secondary
               onClick={() => {
                 if (confirm("Delete this entry? Its prior contents remain in the audit history."))
-                  act(
-                    () => request("/entries/" + edit.id + "?confirmed=true", undefined, "DELETE"),
-                    "Entry deleted",
-                  );
+                  act(async () => {
+                    await request("/entries/" + edit.id + "?confirmed=true", undefined, "DELETE");
+                    if (selected)
+                      setSelected(await request<Preview>(`/invoices/${selected.invoice.id}`));
+                  }, "Entry deleted");
               }}
             >
               Delete entry

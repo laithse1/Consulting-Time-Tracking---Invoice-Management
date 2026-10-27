@@ -58,6 +58,20 @@ The adapter supports `{{input}}`, `{{instructions}}`, `{{model}}`, `{{secret:NAM
 
 No model is installed automatically. HTTP is allowed only for local inference endpoints; remote providers require HTTPS. Requests do not follow redirects. Provider output must preserve disjoint verbatim source spans, including signs/punctuation, and cover all non-whitespace source. Every provider suggestion remains draft work. See [provider adapter details](work-assistant.md#optional-providers).
 
+### Enable a provider API for narrative intake
+
+1. Open the private `config/assistant-providers.json`. If absent, copy the example file first; preserve existing credentials and profiles.
+2. For an HTTP chat-completion JSON API, edit the `http-chat` profile: supply the real `endpoint`, `model`, and `credentials.API_KEY`. Set `enabled` to `true` only after those values are ready. For a messages-style API, use the corresponding example profile and its response pointer.
+3. Keep `{{instructions}}` and `{{input}}` in the request template. They carry the extraction/context/wording or correction contract. Keep credentials only in the private server-side file or explicitly forwarded backend environment variables. The workspace `APP_TOKEN` is separate from a provider key.
+4. Reload Work Assistant. It selects the first configured profile in file order. Review the displayed provider and grant consent before processing. Other profiles remain selectable. Changing the profile file requires no application rebuild/restart.
+5. Paste the complete narrative, including references, exclusions, and accuracy requirements. Review the organized work/context items and resolve missing actual dates/hours. Confirm eligible completed work before generating its invoice.
+
+No paid-provider credentials are supplied by this repository, and a configured profile is not proof of a successful provider connection. A request failure keeps original notes available. If no profile is configured, the interface explains local task-line and notes-only behavior rather than treating offline rules as a general language model.
+
+Explicit **Period / Work description / Hours** allocation tables are recognized locally before provider extraction, including when an API profile is selected. They produce proposed allocations and planned notes, not inferred actual time. See the [table review workflow](work-assistant.md#proposed-work-tables-and-billing-questions). General narrative interpretation and conversational rewriting continue to use the selected provider with consent.
+
+For HTTP 429, the application distinguishes known quota/billing error identifiers from temporary rate limits. Check the API provider's account credits and project/organization limits for quota failures; a ChatGPT/Codex subscription does not fund an OpenAI Platform API connection. Wait before retrying temporary throttling. Unrecognized 429 responses explain both possibilities. Raw remote error messages are not displayed or logged because they can contain private request data. The app does not automatically retry paid requests.
+
 ## Business configuration
 
 Clients & Contracts owns rates, contractual start/end dates, weekly minimum/maximum hours, week start, payment/dispute terms, addresses, and payment instructions. Projects own repository references. These values are stored in SQLite and are not deployment defaults.

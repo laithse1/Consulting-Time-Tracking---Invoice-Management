@@ -7,6 +7,7 @@ import io.consulting.service.ClientService;
 import io.consulting.support.RequestMapper;
 import jakarta.validation.Valid;
 import java.util.Map;
+import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
@@ -37,5 +38,23 @@ public class ClientController {
     @PostMapping("/contracts")
     public Map<String, Object> saveContract(@Valid @RequestBody ContractRequest request) {
         return clients.saveContract(requests.toCommand(request));
+    }
+
+    @PostMapping("/records/{type}/{id}/archive")
+    public void archive(
+        @PathVariable String type,
+        @PathVariable int id,
+        @RequestBody Map<String, Object> request
+    ) {
+        io.consulting.domain.DomainValues.require(
+            request.get("archived") instanceof Boolean,
+            "Archive state must be a boolean"
+        );
+        clients.archive(
+            type,
+            id,
+            Boolean.TRUE.equals(request.get("archived")),
+            Boolean.TRUE.equals(request.get("confirmed"))
+        );
     }
 }

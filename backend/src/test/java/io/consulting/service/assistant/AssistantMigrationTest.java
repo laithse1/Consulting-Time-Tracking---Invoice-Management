@@ -51,7 +51,7 @@ class AssistantMigrationTest {
         Map<String, List<Map<String, Object>>> before = new LinkedHashMap<>();
         tables.forEach(table -> before.put(table, db.queryForList("SELECT * FROM " + table)));
         assertEquals(
-            1,
+            3,
             Flyway.configure().dataSource(url, null, null).load().migrate().migrationsExecuted
         );
         for (String table : tables)

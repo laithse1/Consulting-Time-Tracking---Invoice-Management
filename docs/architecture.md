@@ -1,6 +1,14 @@
 # Architecture and design
 
+Invoice draft creation from a saved assistant plan is a transaction that stores the draft and server-owned `_invoice_id` binding together. Both proposed and applied plans are supported. Applied work is never replayed: invoice receipt bindings are appended or reused while work IDs and status remain intact, including older receipts without explicit bindings. Draft preview reads linked plan state and separates pending/planned work from chargeable ledger entries. It blocks finalization until plan and invoice validation pass. Draft edits use a SHA-256 fingerprint of the current stored invoice as an optimistic edit token; linked plan periods and versions update in the same transaction. Draft deletion is a retained `Deleted` state, preserving invoice numbers and audit identity, and removes active plan bindings. Issued invoices continue to use immutable snapshots and documented replacements.
+
+Flyway V4 introduces a `record_archives` registry for clients, contracts, and projects. Archiving preserves foreign keys and business rows; effective archive state includes the parent client while independent child flags survive restoration. New-work services and timer creation enforce this state. The registry is exposed through the client management service and an allowlisted lifecycle repository. Unallocated expenses retain audited direct deletion.
+
 The root README contains the deployment flow and two end-to-end sequence diagrams. This document explains implementation boundaries and decisions.
+
+Allocation-table intake is implemented in `domain.assistant.StructuredWorkIntake`. It runs before model extraction, keeps proposed hour strings separate from actual seconds, carries inherited allocation ranges, and classifies planned rows as note actions. Billing questions use a required, explicit resolution field. Source metadata is immutable during review; the server enforces resolution and future-date checks before ledger mutations. Daily splitting appends blank draft portions with optimistic version checks, preserves existing action identities, and executes work before invoice/report snapshots. No additional database migration is required: the versioned plan JSON persists the intake metadata.
+
+Provider failures use bounded response reads and the `integration.ai.ProviderFailure` classifier. Recognized error codes determine fixed public messages for quota, throttling, or permissions. Provider-supplied message text is never returned to the client. There are no automatic paid-request retries.
 
 ## Modular monolith
 
@@ -57,6 +65,8 @@ An invoice draft is a mutable preview, not an issued document. Allocation happen
 ## Assistant and provider boundary
 
 The deterministic parser handles bounded facts and commands. Missing, estimated, negated, or ambiguous facts remain drafts. Project/category choices are reviewable. Raw source is retained with the plan.
+
+`LocalWorkPlanParser` selects Automatic, strict Task lines, or Narrative notes behavior. It applies the configured review-action budget rather than counting every source line as a required ledger mutation. Oversized automatic inputs become a `save_note` plan retaining the entire narrative; applying it records only the conversation receipt. Provider work spans are treated as logical work items with multiline evidence, while context spans become nonbillable notes. Neither path can derive actual hours from issue counts or mark unperformed work complete. Automatic invoice steps count toward the same action budget.
 
 The optional HTTP JSON provider client reads private profiles on each request, renders request/header templates, enforces endpoint/redirect/size/time limits, and validates returned source spans. All non-whitespace source—including signs and punctuation—must be covered by disjoint verbatim spans. Dates and durations are reparsed locally, and provider suggestions are always drafts. The provider gets no tools, SQL access, or financial approval capability.
 

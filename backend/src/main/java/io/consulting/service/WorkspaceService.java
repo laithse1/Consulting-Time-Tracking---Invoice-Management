@@ -63,11 +63,22 @@ public class WorkspaceService {
             "historical",
             "audit"
         )) {
-            state.put(table, records.findNewestFirst(table));
+            var rows = records.findNewestFirst(table);
+            state.put(
+                table,
+                java.util.Set.of("clients", "contracts", "projects").contains(table)
+                    ? clients.archiveState(table, rows)
+                    : rows
+            );
         }
         state.put(
             "invoices",
-            records.findNewestFirst("invoices").stream().map(invoiceQueries::invoiceState).toList()
+            records
+                .findNewestFirst("invoices")
+                .stream()
+                .filter(invoice -> !"Deleted".equals(invoice.get("state")))
+                .map(invoiceQueries::invoiceState)
+                .toList()
         );
         state.put("payments", records.findNewestFirst("payments"));
         state.put("timer", records.findAll("timer"));

@@ -1,10 +1,14 @@
 export interface Client {
+  archived?: boolean;
+  archived_self?: boolean;
   id: number;
   name: string;
   email: string;
   address: string;
 }
 export interface Contract {
+  archived?: boolean;
+  archived_self?: boolean;
   id: number;
   client_id: number;
   contractor: string;
@@ -20,6 +24,8 @@ export interface Contract {
   contractor_address: string;
 }
 export interface Project {
+  archived?: boolean;
+  archived_self?: boolean;
   id: number;
   client_id: number;
   name: string;
@@ -132,6 +138,10 @@ export interface State {
   timer: Timer[];
 }
 export interface Preview {
+  edit_token?: string;
+  pendingWork?: { description: string; proposed_hours?: string; work_date?: string }[];
+  plannedWork?: { description: string; proposed_hours?: string }[];
+  assistantPlans?: string[];
   invoice: Invoice;
   contract: Contract;
   client: Client;

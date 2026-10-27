@@ -1,7 +1,7 @@
 import { chromium, expect } from "@playwright/test";
 import { resolve } from "node:path";
 import { spawn } from "node:child_process";
-import { mkdir, writeFile } from "node:fs/promises";
+import { mkdir, readFile, writeFile } from "node:fs/promises";
 import { randomUUID } from "node:crypto";
 const base = process.env.E2E_BASE_URL || "http://127.0.0.1:18082";
 const token = "e2e-isolated-test-token-not-a-real-secret";
@@ -106,12 +106,12 @@ try {
   await page.reload();
   await page.getByRole("button", { name: "Work Assistant", exact: true }).click();
   await expect(page.getByLabel("Work description", { exact: true })).toHaveValue(source);
-  await page.getByRole("button", { name: /2026-09-15: Spent 2h/ }).click();
+  await page.getByRole("button", { name: /^2026-09-15: Spent 2h/ }).click();
   await expect(page.getByText("Plan applied. Saved records are shown below.")).toBeVisible();
   await page.getByRole("button", { name: "Review invoice" }).click();
   await expect(page.getByRole("heading", { name: state.invoices[0].number })).toBeVisible();
   await page.getByRole("button", { name: "Work Assistant", exact: true }).click();
-  await page.getByRole("button", { name: /2026-09-15: Spent 2h/ }).click();
+  await page.getByRole("button", { name: /^2026-09-15: Spent 2h/ }).click();
   await page.getByRole("button", { name: "Revise saved draft" }).click();
   await page.getByLabel("Correction message").fill("Task 1 duration: 90m");
   await page.getByRole("button", { name: "Propose correction" }).click();
@@ -131,7 +131,7 @@ try {
     .screenshot({ path: resolve("../docs/images/assistant-corrections.png") });
   await page.reload();
   await page.getByRole("button", { name: "Work Assistant", exact: true }).click();
-  await page.getByRole("button", { name: /2026-09-15: Spent 2h/ }).click();
+  await page.getByRole("button", { name: /^2026-09-15: Spent 2h/ }).click();
   await expect(page.getByText(/Task 1 duration: 90m/).last()).toBeVisible();
   await page.setViewportSize({ width: 390, height: 844 });
   await expect(page.getByLabel("Work description", { exact: true })).toBeVisible();
@@ -171,8 +171,86 @@ try {
   expect(afterTimer.timer).toHaveLength(0);
   expect(afterTimer.entries).toHaveLength(10);
   expect(afterTimer.entries.at(-1).draft).toBe(1);
+  const narrative =
+    "Work narrative and references\n" +
+    Array.from({ length: 40 }, (_, index) => `- Audiom issue #${index + 1}`).join("\n") +
+    "\nAccuracy requirements: Actual hours unconfirmed. Live deployment remains outstanding. Exclude future and unperformed work from billing.";
+  await page.getByLabel("Work description", { exact: true }).fill(narrative);
+  await page.getByRole("button", { name: "Review action plan" }).click();
+  await expect(page.getByText(/Narrative retained as notes only/)).toBeVisible();
+  await expect(page.getByRole("button", { name: "Save narrative notes" })).toBeDisabled();
+  await page.getByLabel("Confirm reviewed action plan").check();
+  await page.getByRole("button", { name: "Save narrative notes" }).click();
+  await expect(page.getByText(/This note action did not create time entries/)).toBeVisible();
+  expect((await api("/state")).entries).toHaveLength(10);
+  expect((await api("/state")).invoices).toHaveLength(1);
+  const narrativeHistory = await api("/assistant?contract=1");
+  expect(narrativeHistory.plans[0].source).toBe(narrative);
+  expect(narrativeHistory.plans[0].actions[0].source_text).toBe(narrative);
+  const table = await readFile(
+    resolve(root, "backend/src/test/resources/assistant/october-proposed-work.txt"),
+    "utf8",
+  );
+  await page.getByLabel("Work description", { exact: true }).fill(table);
+  await page.locator('input[type="date"]').first().fill("2026-10-25");
+  await page.getByRole("button", { name: "Review action plan" }).click();
+  await expect(page.getByText("80 proposed hours, including 16 planned hours.")).toBeVisible();
+  await expect(page.locator('.assistant-intake-notice[role="status"]')).toHaveCSS(
+    "display",
+    "block",
+  );
+  await expect(
+    page.locator(".assistant-action").first().getByLabel("Reference", { exact: true }),
+  ).toHaveValue("issue #1");
+  await expect(page.locator(".assistant-action")).toHaveCount(19);
+  const tableInvoice = page
+    .locator(".assistant-action")
+    .filter({ has: page.getByLabel("Prepare an invoice from the included confirmed work") });
+  await expect(tableInvoice.getByLabel("Period end")).toHaveValue("2026-10-30");
+  await expect(
+    tableInvoice.getByLabel("Prepare an invoice from the included confirmed work"),
+  ).not.toBeChecked();
+  await expect(page.getByText("Planned · no time entry or charge", { exact: true })).toHaveCount(4);
+  await expect(
+    page.locator(".assistant-action").nth(16).getByLabel("Actual work date"),
+  ).toHaveValue("2026-10-25");
+  await page
+    .locator(".assistant-action")
+    .first()
+    .getByRole("button", { name: "Add another actual work date for this task" })
+    .click();
+  await expect(page.locator(".assistant-action")).toHaveCount(20);
+  await expect(page.getByText("80 proposed hours, including 16 planned hours.")).toBeVisible();
+  await expect(
+    page.locator(".assistant-action").last().getByLabel("Actual duration (hours)"),
+  ).toHaveValue("");
+  await page.setViewportSize({ width: 1440, height: 1100 });
+  await page
+    .locator(".assistant-plan")
+    .evaluate((element) => element.scrollIntoView({ block: "start" }));
+  await page.screenshot({ path: resolve(root, "docs/images/assistant-allocation-review.png") });
+  await page.setViewportSize({ width: 390, height: 844 });
+  await tableInvoice.getByLabel("Prepare an invoice from the included confirmed work").check();
+  await page.getByLabel("Confirm reviewed action plan").check();
+  await expect(page.getByRole("button", { name: "Apply reviewed plan" })).toBeDisabled();
+  await expect(page.getByRole("alert").filter({ hasText: "Resolve the allocation" })).toBeVisible();
+  // Save drafts first; a forecast never becomes an invoice just because the plan was confirmed.
+  await tableInvoice.getByLabel("Prepare an invoice from the included confirmed work").uncheck();
+  await page.getByLabel("Confirm reviewed action plan").check();
+  await page.getByRole("button", { name: "Apply reviewed plan" }).click();
+  await expect(page.getByText("Plan applied. Saved records are shown below.")).toBeVisible();
+  const afterTable = await api("/state");
+  expect(afterTable.invoices).toHaveLength(1);
+  expect(afterTable.entries.filter((entry) => entry.work_date >= "2026-10-26")).toHaveLength(0);
+  expect(
+    afterTable.entries.filter(
+      (entry) => entry.work_date?.startsWith("2026-10") && entry.draft === 0,
+    ),
+  ).toHaveLength(0);
+  expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
+  expect(errors).toEqual([]);
   console.log(
-    "Assistant browser workflow passed: local parsing, autosave, atomic apply, invoice preview, saved corrections, draft invoice reuse, exact reports, retry safety, reload, mobile, and CORS.",
+    "Assistant browser workflow passed: local parsing, allocation tables, actual daily splitting, billing-question gate, planned-work exclusion, autosave, atomic apply, invoice preview, saved corrections, draft invoice reuse, exact reports, retry safety, reload, mobile, and CORS.",
   );
 } catch (error) {
   await writeFile(resolve(root, "tmp", "assistant-e2e-server.log"), logs);

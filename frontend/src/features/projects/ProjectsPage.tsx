@@ -1,6 +1,7 @@
 import { useWorkspaceData } from "@/app/WorkspaceContext";
 import { Button } from "@/components/ui/Button";
 import { FolderKanban, Plus } from "lucide-react";
+import { RecordArchiveButton } from "@/features/clients/RecordArchiveButton";
 export function ProjectsPage() {
   const { setModal, projects, actual } = useWorkspaceData();
   return (
@@ -17,6 +18,7 @@ export function ProjectsPage() {
           <section className="panel" key={p.id}>
             <FolderKanban size={24} className="project-icon" />
             <h2>{p.name}</h2>
+            {p.archived && <span className="badge">Archived</span>}
             <p className="muted small">{p.repository || "Add a repository reference"}</p>
             <strong>
               {(
@@ -27,6 +29,12 @@ export function ProjectsPage() {
               hrs
             </strong>
             <small className="muted"> in selected month</small>
+            <div className="actions">
+              <Button secondary onClick={() => setModal(`project:${p.id}`)}>
+                Edit project
+              </Button>
+              <RecordArchiveButton type="projects" record={p} />
+            </div>
           </section>
         ))}
       </div>

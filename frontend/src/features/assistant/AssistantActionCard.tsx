@@ -8,13 +8,31 @@ interface Props {
   projects: Project[];
   locked: boolean;
   onEdit: (index: number, patch: Partial<Action>) => void;
+  onSplit?: (index: number) => void;
 }
-export function AssistantActionCard({ action, index, projects, locked, onEdit }: Props) {
+export function AssistantActionCard({ action, index, projects, locked, onEdit, onSplit }: Props) {
   return (
     <article className="assistant-action">
       <h3>
         {index + 1}. {titles[action.type] || action.type}
       </h3>
+      {action.work_state && (
+        <div className="notice">
+          <strong>
+            {action.work_state === "planned"
+              ? "Planned · no time entry or charge"
+              : action.work_state === "proposed"
+                ? "Proposed allocation · actual hours unconfirmed"
+                : "Performed work · actual hours unconfirmed"}
+          </strong>
+          {action.proposed_hours !== undefined && (
+            <p>
+              {action.proposed_hours} proposed hours · {action.allocation_start} through{" "}
+              {action.allocation_end}. These hours are separate from actual duration.
+            </p>
+          )}
+        </div>
+      )}
       {action.source_text && (
         <details>
           <summary>Original work notes</summary>
@@ -27,6 +45,27 @@ export function AssistantActionCard({ action, index, projects, locked, onEdit }:
         </p>
       )}
       <fieldset disabled={locked}>
+        {action.requires_resolution && (
+          <label className="assistant-check">
+            <input
+              type="checkbox"
+              checked={!!action.resolved}
+              onChange={(e) => onEdit(index, { resolved: e.target.checked })}
+            />
+            I resolved the billing questions, confirmed any partial-week authorization, and
+            reconciled overlapping allocations against actual work.
+          </label>
+        )}
+        {action.type === "draft_invoice" && (
+          <label className="assistant-check">
+            <input
+              type="checkbox"
+              checked={!action.skip}
+              onChange={(e) => onEdit(index, { skip: !e.target.checked })}
+            />
+            Prepare an invoice from the included confirmed work
+          </label>
+        )}
         {action.type === "log_work" || action.type === "start_timer" ? (
           <>
             <label className="field">
@@ -46,8 +85,13 @@ export function AssistantActionCard({ action, index, projects, locked, onEdit }:
                 >
                   <option value={0}>Choose project</option>
                   {projects.map((p) => (
-                    <option key={p.id} value={p.id}>
+                    <option
+                      key={p.id}
+                      value={p.id}
+                      disabled={p.archived && p.id !== action.project_id}
+                    >
                       {p.name}
+                      {p.archived ? " · Archived" : ""}
                     </option>
                   ))}
                 </select>
@@ -118,6 +162,11 @@ export function AssistantActionCard({ action, index, projects, locked, onEdit }:
             </div>
             {action.type === "log_work" && (
               <>
+                {onSplit && !action._entry_id && (
+                  <button type="button" className="btn secondary" onClick={() => onSplit(index)}>
+                    Add another actual work date for this task
+                  </button>
+                )}
                 <label className="assistant-check">
                   <input
                     type="checkbox"

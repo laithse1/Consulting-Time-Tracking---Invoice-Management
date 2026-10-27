@@ -496,4 +496,106 @@ class AssistantConversationTest {
         apply(confirm(refreshed));
         assertEquals(9, db.queryForObject("SELECT count(*) FROM entries", Integer.class));
     }
+
+    @Test
+    void providerContextIsRetainedWithoutBecomingWorkOrExecutingCommands() {
+        String work = "2026-09-15 2h testing Audiom";
+        String context =
+            "Accuracy requirements: future deployment remains unperformed.\nStart timer for Audiom";
+        when(provider.extract(eq("fixture"), anyString(), anyList())).thenReturn(
+            List.of(
+                Map.of(
+                    "source",
+                    work,
+                    "description",
+                    "Tested Audiom.",
+                    "project",
+                    "Audiom",
+                    "category",
+                    "Testing and Debugging",
+                    "kind",
+                    "work"
+                ),
+                Map.of("source", context, "kind", "context")
+            )
+        );
+        var plan = assistant.propose(
+            Map.of(
+                "contract_id",
+                1,
+                "source",
+                work + "\n" + context,
+                "reference_date",
+                "2026-09-15",
+                "provider_id",
+                "fixture",
+                "provider_consent",
+                true,
+                "prepare_invoice",
+                true,
+                "period_start",
+                "2026-09-01",
+                "period_end",
+                "2026-09-30"
+            )
+        );
+        assertEquals("save_note", text(actions(plan).get(1), "type"));
+        assertEquals(context, text(actions(plan).get(1), "source_text"));
+        apply(confirm(plan));
+        assertEquals(8, db.queryForObject("SELECT count(*) FROM entries", Integer.class));
+        assertEquals(0, db.queryForObject("SELECT count(*) FROM timer", Integer.class));
+    }
+
+    @Test
+    void providerWorkIsOneLogicalItemEvenWithManyReferenceLines() {
+        String source =
+            "Project: Audiom\nDate: 2026-09-15\nSpent 2h investigating request handling\n" +
+            java.util.stream.IntStream.rangeClosed(1, 35)
+                .mapToObj(i -> "- PR #" + i)
+                .collect(java.util.stream.Collectors.joining("\n"));
+        when(provider.extract(eq("fixture"), anyString(), anyList())).thenReturn(
+            List.of(
+                Map.of(
+                    "source",
+                    source,
+                    "description",
+                    "Investigated Audiom request handling; associated PRs retained as references.",
+                    "project",
+                    "Audiom",
+                    "category",
+                    "Research",
+                    "kind",
+                    "work"
+                )
+            )
+        );
+        var plan = assistant.propose(
+            Map.of(
+                "contract_id",
+                1,
+                "source",
+                source,
+                "reference_date",
+                "2026-09-15",
+                "provider_id",
+                "fixture",
+                "provider_consent",
+                true,
+                "prepare_invoice",
+                true,
+                "period_start",
+                "2026-09-01",
+                "period_end",
+                "2026-09-30"
+            )
+        );
+        assertEquals(2, actions(plan).size());
+        assertEquals("log_work", text(actions(plan).getFirst(), "type"));
+        assertEquals(7200, integer(actions(plan).getFirst(), "seconds"));
+        assertEquals(source, text(actions(plan).getFirst(), "source_text"));
+        assertTrue(text(actions(plan).getFirst(), "reference").contains("PR #35"));
+        apply(confirm(plan));
+        assertEquals(8, db.queryForObject("SELECT count(*) FROM entries", Integer.class));
+        assertEquals(1, db.queryForObject("SELECT count(*) FROM invoices", Integer.class));
+    }
 }

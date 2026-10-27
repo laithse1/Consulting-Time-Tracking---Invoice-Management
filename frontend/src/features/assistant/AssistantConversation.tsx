@@ -35,7 +35,13 @@ export function AssistantConversation({ plan, provider, busy, onRevise, onReopen
           </small>
         </div>
       ))}
-      {plan.status === "applied" ? (
+      {plan.actions.length > 0 && plan.actions.every((action) => action.type === "save_note") ? (
+        <p className="small muted">
+          These are nonbillable notes. To extract work items, select a configured provider in
+          Processing and use Review action plan again with the original notes. Local mode needs
+          smaller dated task lines with actual durations.
+        </p>
+      ) : plan.status === "applied" ? (
         <div>
           <p className="small muted">
             Reopen this saved draft to request corrections. Reapplying updates its existing work and

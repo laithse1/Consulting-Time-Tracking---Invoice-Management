@@ -20,6 +20,7 @@ export function useWorkspaceController() {
   const [modal, setModal] = useState("");
   const [edit, setEdit] = useState<Entry>();
   const [selected, setSelected] = useState<Preview>();
+  const [assistantPlanId, setAssistantPlanId] = useState<string>();
   const [query, setQuery] = useState("");
   const [sort, setSort] = useState("date");
   const [filter, setFilter] = useState("all");
@@ -150,6 +151,8 @@ export function useWorkspaceController() {
     setEdit,
     selected,
     setSelected,
+    assistantPlanId,
+    setAssistantPlanId,
     query,
     setQuery,
     sort,

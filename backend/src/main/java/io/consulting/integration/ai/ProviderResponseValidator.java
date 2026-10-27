@@ -25,7 +25,7 @@ final class ProviderResponseValidator {
                 segment.isObject() && segment.path("source").isTextual(),
                 "Provider source must be text"
             );
-            for (String field : List.of("description", "project", "category"))
+            for (String field : List.of("description", "project", "category", "kind"))
                 require(
                     !segment.has(field) || segment.path(field).isTextual(),
                     "Provider " + field + " must be text"
@@ -41,6 +41,11 @@ final class ProviderResponseValidator {
                 "Provider omitted part of your description; no actions were applied"
             );
             String description = segment.path("description").asText("");
+            String kind = segment.path("kind").asText("auto");
+            require(
+                !segment.has("kind") || List.of("work", "command", "context").contains(kind),
+                "Provider segment kind must be work, command, or context"
+            );
             require(description.length() <= 2000, "Suggested description exceeds 2,000 characters");
             segments.add(
                 Map.of(
@@ -51,7 +56,9 @@ final class ProviderResponseValidator {
                     "project",
                     segment.path("project").asText(),
                     "category",
-                    segment.path("category").asText()
+                    segment.path("category").asText(),
+                    "kind",
+                    kind
                 )
             );
             cursor = at + literal.length();

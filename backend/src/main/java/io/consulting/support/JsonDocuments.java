@@ -34,4 +34,18 @@ public class JsonDocuments {
             throw new IllegalStateException("Could not read stored document", exception);
         }
     }
+
+    public String fingerprint(Map<String, Object> record) {
+        try {
+            return java.util.HexFormat.of().formatHex(
+                java.security.MessageDigest.getInstance("SHA-256").digest(
+                    encode(new java.util.TreeMap<>(record)).getBytes(
+                        java.nio.charset.StandardCharsets.UTF_8
+                    )
+                )
+            );
+        } catch (java.security.NoSuchAlgorithmException exception) {
+            throw new IllegalStateException("SHA-256 unavailable", exception);
+        }
+    }
 }

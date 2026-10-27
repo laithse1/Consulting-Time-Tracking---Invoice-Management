@@ -25,23 +25,30 @@ public class InvoiceQueryService {
     private final ClientService clients;
     private final ComplianceService compliance;
     private final JsonDocuments documents;
+    private final io.consulting.repository.InvoiceRepository invoiceRecords;
 
     public InvoiceQueryService(
         InvoiceQueryRepository repository,
         RecordRepository records,
         ClientService clients,
         ComplianceService compliance,
-        JsonDocuments documents
+        JsonDocuments documents,
+        io.consulting.repository.InvoiceRepository invoiceRecords
     ) {
         this.repository = repository;
         this.records = records;
         this.clients = clients;
         this.compliance = compliance;
         this.documents = documents;
+        this.invoiceRecords = invoiceRecords;
     }
 
     public Map<String, Object> preview(int id) {
         var invoice = records.findById("invoices", id);
+        io.consulting.domain.DomainValues.require(
+            !text(invoice, "state").equals("Deleted"),
+            "This invoice draft was deleted. Its number and audit history are retained."
+        );
         if (!text(invoice, "snapshot").isEmpty()) {
             var result = documents.decode(text(invoice, "snapshot"));
             result.put("invoice", invoiceState(invoice));
@@ -123,6 +130,40 @@ public class InvoiceQueryService {
                 .setScale(2)
         );
         result.put("warnings", warnings);
+        result.put("edit_token", documents.fingerprint(invoice));
+        var pending = new ArrayList<Map<String, Object>>();
+        var planned = new ArrayList<Map<String, Object>>();
+        var planIds = new ArrayList<String>();
+        for (var plan : invoiceRecords.linkedPlans(id)) {
+            planIds.add(text(plan, "id"));
+            if (text(plan, "status").equals("proposed")) warnings.add(
+                "Linked work plan is still proposed. Review and apply it before finalizing this invoice."
+            );
+            for (var action : (java.util.List<Map<String, Object>>) documents
+                .decode(text(plan, "plan_json"))
+                .get("actions")) {
+                if (
+                    Boolean.TRUE.equals(action.get("requires_resolution")) &&
+                    !Boolean.TRUE.equals(action.get("resolved"))
+                ) warnings.add(
+                    "Resolve the linked work plan's allocation and billing questions before finalization."
+                );
+                if (text(action, "work_state").equals("planned")) planned.add(action);
+                if (
+                    text(action, "type").equals("log_work") &&
+                    !Boolean.TRUE.equals(action.get("skip")) &&
+                    ((text(plan, "status").equals("proposed") &&
+                        integer(action, "_entry_id") == 0) ||
+                        integer(action, "draft") == 1)
+                ) pending.add(action);
+            }
+        }
+        if (!pending.isEmpty()) warnings.add(
+            "Pending work is shown for review only and is excluded from billable totals. Confirm actual dates and hours in Work Assistant."
+        );
+        result.put("pendingWork", pending);
+        result.put("plannedWork", planned);
+        result.put("assistantPlans", planIds);
         return result;
     }
 

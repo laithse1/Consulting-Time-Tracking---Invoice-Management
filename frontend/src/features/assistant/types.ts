@@ -20,10 +20,17 @@ export interface Action {
   skip?: boolean;
   _invoice_id?: number;
   _entry_id?: number;
+  proposed_hours?: string;
+  allocation_start?: string;
+  allocation_end?: string;
+  work_state?: "proposed" | "planned" | "performed_unconfirmed";
+  requires_resolution?: boolean;
+  resolved?: boolean;
 }
 
 export interface Result {
   type: string;
+  note?: string;
   entry?: Entry;
   invoice?: Invoice;
   warnings?: string[];
@@ -47,6 +54,8 @@ export interface Result {
 }
 
 export interface Plan {
+  deleted_at?: string | null;
+  reference_date?: string;
   id: string;
   source: string;
   status: string;

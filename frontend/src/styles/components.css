@@ -72,6 +72,17 @@
   grid-template-columns: minmax(0, 1.65fr) minmax(300px, 1fr);
   gap: 24px;
 }
+.dashboard-grid > .panel {
+  min-width: 0;
+}
+.dashboard-grid .btn {
+  max-width: 100%;
+  white-space: normal;
+}
+.pending-work li {
+  margin-top: 0.75rem;
+  overflow-wrap: anywhere;
+}
 .section-head {
   display: flex;
   align-items: center;
@@ -132,6 +143,13 @@
   color: var(--green);
   font-size: 11px;
   white-space: nowrap;
+}
+.invoice-row-actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 12px;
+  min-width: 140px;
 }
 .callout {
   background: var(--bg);

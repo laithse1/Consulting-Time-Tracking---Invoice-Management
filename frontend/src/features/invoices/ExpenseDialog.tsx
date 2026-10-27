@@ -46,6 +46,24 @@ export function ExpenseDialog() {
             required
           />
           <Button type="submit">Save expense</Button>
+          {expense && (
+            <Button
+              secondary
+              onClick={() => {
+                if (
+                  confirm(
+                    "Delete this expense? Its prior contents remain in audit history. Issued expenses cannot be deleted.",
+                  )
+                )
+                  act(
+                    () => request(`/expenses/${expense.id}?confirmed=true`, undefined, "DELETE"),
+                    "Expense deleted",
+                  );
+              }}
+            >
+              Delete expense
+            </Button>
+          )}
         </form>
       </Modal>
     );

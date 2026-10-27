@@ -10,6 +10,7 @@ export function AssistantResultCard({ result, onInvoice }: Props) {
   return (
     <div className="assistant-result">
       <strong>{titles[result.type]}</strong>
+      {result.note && <p>{result.note}</p>}
       {result.entry && (
         <p>
           Entry #{result.entry.id} saved ·{" "}

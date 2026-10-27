@@ -1,4 +1,4 @@
-import { download } from "@/lib/api/client";
+import { download, request } from "@/lib/api/client";
 import { usd } from "@/lib/money";
 import { useWorkspaceData } from "@/app/WorkspaceContext";
 import { EntryTable } from "@/components/tables/EntryTable";
@@ -6,11 +6,44 @@ import { InvoiceTable } from "@/components/tables/InvoiceTable";
 import { Badge } from "@/components/ui/Badge";
 import { Button } from "@/components/ui/Button";
 import { ArrowUpRight, Check, Download, Plus } from "lucide-react";
+import { useState } from "react";
+import type { Invoice, Preview } from "@/types";
+import { InvoiceEditDialog } from "./InvoiceEditDialog";
 export function InvoicesPage() {
+  const [editingInvoice, setEditingInvoice] = useState<Preview>();
   const { selected, setSelected, data, act, mutateInvoice, setModal, invoices, openInvoice, cid } =
     useWorkspaceData();
+  const { entryForm, setPage, setAssistantPlanId } = useWorkspaceData();
+  function editFromList(id: number) {
+    act(async () => {
+      setEditingInvoice(await request<Preview>(`/invoices/${id}`));
+    }, "Invoice draft ready to edit");
+  }
+  function deleteFromList(invoice: Invoice) {
+    if (
+      !confirm(
+        `Delete draft invoice ${invoice.number}? Its number and audit history will be retained. Work entries and expenses will remain.`,
+      )
+    )
+      return;
+    act(async () => {
+      const current = await request<Preview>(`/invoices/${invoice.id}`);
+      await request(
+        `/invoices/${invoice.id}?confirmed=true&expected_token=${encodeURIComponent(current.edit_token ?? "")}`,
+        undefined,
+        "DELETE",
+      );
+    }, "Invoice draft deleted");
+  }
   return (
     <>
+      {editingInvoice && (
+        <InvoiceEditDialog
+          preview={editingInvoice}
+          onClose={() => setEditingInvoice(undefined)}
+          onSaved={() => setEditingInvoice(undefined)}
+        />
+      )}
       {selected ? (
         <>
           <div className="section-head">
@@ -49,9 +82,55 @@ export function InvoicesPage() {
               <EntryTable
                 entries={selected.entries}
                 projects={data.projects}
-                onEdit={() => {}}
-                readonly
+                onEdit={entryForm}
+                readonly={!!selected.invoice.snapshot}
               />
+              {!!selected.pendingWork?.length && (
+                <section className="validation pending-work">
+                  <h3>Pending work · excluded from charges</h3>
+                  <p>
+                    Confirm actual work in Work Assistant. Proposed hours are planning figures, not
+                    billable time.
+                  </p>
+                  <details>
+                    <summary>Review {selected.pendingWork.length} pending tasks</summary>
+                    <ul>
+                      {selected.pendingWork.map((work, index) => (
+                        <li key={index}>
+                          {work.description}
+                          {work.proposed_hours
+                            ? ` — ${work.proposed_hours} proposed hours`
+                            : " — actual hours needed"}
+                        </li>
+                      ))}
+                    </ul>
+                  </details>
+                </section>
+              )}
+              {!!selected.plannedWork?.length && (
+                <details>
+                  <summary>
+                    {selected.plannedWork.length} planned tasks · excluded from charges
+                  </summary>
+                  <ul>
+                    {selected.plannedWork.map((work, index) => (
+                      <li key={index}>{work.description}</li>
+                    ))}
+                  </ul>
+                </details>
+              )}
+              {!!selected.assistantPlans?.length && (
+                <Button
+                  secondary
+                  onClick={() => {
+                    setAssistantPlanId(selected.assistantPlans![0]);
+                    setPage("Work Assistant");
+                  }}
+                >
+                  Review linked work in Work Assistant
+                </Button>
+              )}
+              {selected.invoice.notes && <p className="small">{selected.invoice.notes}</p>}
               {selected.expenses.map((e) => (
                 <div className="total-row" key={e.id}>
                   <span>
@@ -139,24 +218,50 @@ export function InvoicesPage() {
                   Preview PDF <ArrowUpRight size={16} />
                 </Button>
                 {!selected.invoice.snapshot ? (
-                  <Button
-                    onClick={() => {
-                      if (
-                        confirm(
-                          "Finalize this invoice? Its contents will be locked. Confirm you reviewed all work, expenses and approvals.",
+                  <>
+                    <Button secondary onClick={() => setModal("edit-invoice")}>
+                      Edit invoice draft
+                    </Button>
+                    <Button
+                      secondary
+                      onClick={() => {
+                        if (
+                          confirm(
+                            "Delete this draft invoice? Its number and audit history will be retained. Work entries and expenses will remain.",
+                          )
                         )
-                      )
-                        act(
-                          () =>
-                            mutateInvoice("/finalize", {
-                              confirmed: true,
-                            }),
-                          "Invoice finalized",
-                        );
-                    }}
-                  >
-                    Confirm & finalize
-                  </Button>
+                          act(async () => {
+                            await request(
+                              `/invoices/${selected.invoice.id}?confirmed=true&expected_token=${selected.edit_token}`,
+                              undefined,
+                              "DELETE",
+                            );
+                            setSelected(undefined);
+                          }, "Invoice draft deleted");
+                      }}
+                    >
+                      Delete invoice draft
+                    </Button>
+                    <Button
+                      disabled={selected.warnings.length > 0}
+                      onClick={() => {
+                        if (
+                          confirm(
+                            "Finalize this invoice? Its contents will be locked. Confirm you reviewed all work, expenses and approvals.",
+                          )
+                        )
+                          act(
+                            () =>
+                              mutateInvoice("/finalize", {
+                                confirmed: true,
+                              }),
+                            "Invoice finalized",
+                          );
+                      }}
+                    >
+                      Confirm & finalize
+                    </Button>
+                  </>
                 ) : (
                   <>
                     {!["Replaced", "Withdrawn"].includes(selected.invoice.state) && (
@@ -230,7 +335,12 @@ export function InvoicesPage() {
             </div>
           </div>
           <section className="panel">
-            <InvoiceTable invoices={invoices} onOpen={openInvoice} />
+            <InvoiceTable
+              invoices={invoices}
+              onOpen={openInvoice}
+              onEdit={editFromList}
+              onDelete={deleteFromList}
+            />
           </section>
           <section className="panel">
             <h2>Reimbursable expenses</h2>

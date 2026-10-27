@@ -1,6 +1,68 @@
 # Work Assistant
 
+Use **Delete** beside a saved conversation to remove it from this list after confirmation. Both proposed and applied conversations can be removed. The selected plan closes when deleted, and the change persists after reload. Work entries, invoices, current composer notes, and linked billing review evidence remain intact. This is soft deletion, not permanent erasure: invoice review links can still open the retained conversation for review and corrections, and unresolved billing warnings continue to prevent finalization. Refresh the saved plan before retrying if another window changed it.
+
+![Saved conversation with a separate Delete control](images/conversation-delete.png)
+
 Open **Work Assistant** in the sidebar. Local rules are the default: no model, API key, network connection, or AI service is required. The app converts one task per line into an editable plan with basic wording cleanup. Choose a configured language provider for professional invoice descriptions and conversational corrections. Review and apply the plan to log completed work, control timers, draft an invoice, and generate a report together.
+
+## Free-form narrative intake
+
+### Creating an invoice from a saved work plan
+
+**Saved conversations** preserves plans and receipts; a `proposed` conversation alone is not an invoice or a time entry. An `applied` conversation may also have saved work without creating an invoice. Open either conversation and use the prominent **Create invoice draft** control. Check its visible service period first. The app creates a real draft immediately, binds it to this plan, and opens the invoice screen. Existing invoice receipts are reused, including older receipts without an explicit binding. Applied work is never replayed to create the document; its entries and receipt identities remain intact.
+
+The invoice screen separates **Pending work · excluded from charges** and planned tasks from eligible confirmed ledger entries. Proposed hours never become charges just because a draft exists. Finalization is disabled while the linked plan is proposed, included work is incomplete, billing questions remain unresolved, or ordinary invoice validation fails. Choose **Review linked work in Work Assistant** to return to the exact saved plan, including plans outside the recent-history window. Resolve actual work and apply the plan; its existing invoice is reused.
+
+This early draft path is separate from **Prepare an invoice from the included confirmed work**, which applies reviewed ledger changes and invoice preparation together. The latter still requires actual confirmation. Saving a draft first lets you review the document while completing that work review.
+
+```mermaid
+sequenceDiagram
+    participant UI as React app
+    participant API as Spring Boot API
+    participant DB as SQLite
+    UI->>API: Create invoice draft from saved plan and version
+    API->>DB: Create draft and bind plan atomically
+    API-->>UI: Draft with pending work and validation warnings
+    Note over UI,API: Draft creation does not confirm hours or finalize an invoice
+    UI->>API: Save actual work corrections and apply reviewed plan
+    API->>DB: Save work and reuse the linked invoice
+    UI->>API: Review and explicitly finalize validated invoice
+    API->>DB: Freeze snapshot and allocate eligible source records
+```
+
+![Invoice draft with pending work separated from charges](images/invoice-pending-review.png)
+
+### Proposed work tables and billing questions
+
+Automatic intake recognizes tab/space-separated or Markdown tables with **Period / Work description / Hours** columns. Same-month ranges such as `Oct 1–2` and inherited periods on following rows are retained as allocation ranges. The reference date supplies the year when omitted. This explicit table path runs locally, even when a provider is selected; it does not make an API request. Arbitrary prose outside this supported structure still needs the configured provider or manual review. All original notes remain available in the plan.
+
+Table hours are **proposed allocations**, stored separately from actual duration. Earlier rows become editable drafts with no assumed daily date or actual hours; future/planned rows become notes with no time entries or charges. The review shows proposed and planned totals separately from confirmed services. An explicit sentence such as “The PR split was already completed on October 25.” creates an additional draft on that date with no inferred hours. Review its allocation against earlier tasks and later planned review to avoid double counting.
+
+For the October acceptance example, the result is **80 proposed hours, including 16 planned hours**, 12 earlier task drafts, one October 25 PR draft, and billing questions. The invoice period stays **October 1–30, 2026**. Invoice preparation starts excluded. The app does not certify the partial week's entitlement or turn a weekly budget into actual hours.
+
+1. Enter each performed task's actual date, duration, and project. Use **Add another actual work date for this task** for daily portions; it adds an empty draft and does not duplicate the proposed budget. This is available before the task is saved to the ledger and within the configured action limit.
+2. Rebalance actual entries for PR preparation against existing work. Exclude tasks not performed. Planned notes must be resubmitted as actual work after performance.
+3. Resolve the billing questions, including any partial-week authorization, duplicate allocations, outstanding acceptance checks, and missing billing details. Mark the resolution checkbox only after reviewing them; this acknowledgement does not authorize minimum-charge or overtime adjustments.
+4. Enable **Prepare an invoice from the included confirmed work** when ready. The server blocks it while billing questions are unresolved or included work lacks actual confirmation. Alternatively, leave invoice preparation excluded and apply the plan to save drafts first.
+
+Confirmed work after the plan's reference date is rejected before any writes. Create a new plan after future work is performed. Conversational corrections can revise existing work descriptions/facts; they do not automatically rebalance weekly allocations or add arbitrary tasks. Daily splitting and the editable review fields provide explicit control over those changes.
+
+### General narratives
+
+![Allocation review with proposed hours separated from actual work](images/assistant-allocation-review.png)
+
+For long, mixed work narratives, configure a provider API using the [provider setup steps](configuration.md#enable-a-provider-api-for-narrative-intake). The first configured profile is selected when Work Assistant opens, and sending still requires consent. Providers organize logical work items instead of creating an action for each line. One item's evidence can contain multiple paragraphs or reference lines; dates and actual durations are validated together, with missing or ambiguous facts left for review. Reference lists, accuracy instructions, and future/unperformed work can be retained as `context` notes without creating time entries or charges.
+
+Without a configured provider, choose a **Local input style**:
+
+- **Automatic** (default) recognizes explicit allocation tables and supported dated task lines. If the configured action budget is exceeded, including an automatic invoice step, it retains the entire original narrative as one nonbillable note action. It does not truncate the message or fabricate an invoice.
+- **Task lines** strictly parses one task/command per line and explains the configured limit and recovery choices when exceeded. Date/project headers do not consume task slots.
+- **Narrative notes** preserves the text without interpreting it or executing embedded commands. It does not generate time entries, reports, timers, or an invoice. The invoice checkbox is disabled for this mode.
+
+A note action is labeled **Retain nonbillable notes**. Review and choose **Save narrative notes** to keep its receipt; all original notes are already retained with the proposed conversation. To produce structured work from those notes, configure/select a provider and choose **Review action plan** again from the original source, or supply smaller dated task messages. The offline notes fallback is preservation, not language-model understanding. It cannot be converted to a work action by changing its type.
+
+`ASSISTANT_MAX_ACTIONS` is a review-action budget (default and maximum 30), not a count of issues or references mentioned in prose. The local parser uses the configured budget, and invoice/report steps count toward it. A provider should group related context rather than return a segment for every reference line. Separate genuinely larger task batches for review. The input character limit remains explicit in the composer. No setting authorizes inferred hours or unsupported completion/acceptance claims.
 
 ```text
 2026-09-15: Spent 2h refactoring geospatial-mcp-server, PR #42.
@@ -99,7 +161,9 @@ Profiles define an HTTP JSON request, headers, and a JSON Pointer locating the r
 
 The examples cover local Ollama, a chat-completion JSON shape, and the Anthropic messages shape. Install/select your own model; the examples do not assume a model exists. For Ollama running on the Docker host, use `host.docker.internal`; a native backend can use `localhost`. Remote endpoints must use HTTPS, and redirects are disabled. Environment placeholders work only for variables actually passed to the backend container; shell variables are not automatically forwarded by Compose.
 
-For initial notes, the provider returns `{"segments":[{"source":"exact source span","description":"professional invoice wording","project":"existing project name","category":"existing category"}]}`. `description` is optional for compatibility and limited to 2,000 characters. Spans must be ordered, nonoverlapping, verbatim, and cover all non-whitespace input, including signs and punctuation. Keep context headers with the work they qualify. Commands remain source segments and are parsed locally. A suggested description is used only when its segment produces exactly one work task.
+For initial notes, the provider returns `{"segments":[{"kind":"work","source":"exact source span","description":"professional invoice wording","project":"existing project name","category":"existing category"}]}`. `description` is optional for compatibility and limited to 2,000 characters. Optional `kind` is `work`, `command`, or `context`. Work spans produce one logical item even when multiline; references remain attached. Context spans retain reference lists, instructions, and unperformed work as nonbillable notes. Command spans are validated against the local supported grammar. Profiles omitting `kind` retain legacy single-line command recognition.
+
+Spans must be ordered, nonoverlapping, verbatim, and cover all non-whitespace input, including signs and punctuation. Keep date/project headers with their work. Split work with distinct dates or actual durations into separate work spans. Provider wording still requires review and cannot supply authoritative hours or approvals.
 
 For corrections, the same profile receives different `{{instructions}}` and structured `{{input}}`, and returns `{"changes":[{"task":1,"description":"Revised wording","update_duration":true}],"clarification":""}`. Only the documented correction fields are accepted; direct time/date values, tools, and financial actions are rejected. No profile format change is needed when its request forwards both placeholders and its model can follow the JSON contract.
 

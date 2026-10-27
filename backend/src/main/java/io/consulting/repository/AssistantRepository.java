@@ -26,14 +26,32 @@ public class AssistantRepository {
 
     public List<Map<String, Object>> findPlans(int contractId, int limit) {
         return jdbc.queryForList(
-            "SELECT * FROM assistant_plans WHERE contract_id=? ORDER BY created DESC LIMIT ?",
+            "SELECT * FROM assistant_plans WHERE contract_id=? AND id NOT IN (SELECT plan_id FROM assistant_conversation_deletions) ORDER BY created DESC LIMIT ?",
             contractId,
             limit
         );
     }
 
     public List<Map<String, Object>> findPlan(String id) {
-        return jdbc.queryForList("SELECT * FROM assistant_plans WHERE id=?", id);
+        return jdbc.queryForList(
+            "SELECT p.*,d.deleted_at FROM assistant_plans p LEFT JOIN assistant_conversation_deletions d ON d.plan_id=p.id WHERE p.id=?",
+            id
+        );
+    }
+
+    public boolean deleteConversation(String id, int version) {
+        int changed = jdbc.update(
+            "UPDATE assistant_plans SET version=version+1 WHERE id=? AND version=? AND id NOT IN (SELECT plan_id FROM assistant_conversation_deletions)",
+            id,
+            version
+        );
+        if (changed != 1) return false;
+        jdbc.update(
+            "INSERT INTO assistant_conversation_deletions(plan_id,deleted_at) VALUES(?,?)",
+            id,
+            Instant.now().toString()
+        );
+        return true;
     }
 
     public void saveDraft(int contractId, String source) {
@@ -95,6 +113,18 @@ public class AssistantRepository {
             jdbc.update(
                 "UPDATE assistant_plans SET plan_json=?,version=version+1 WHERE id=? AND version=? AND status='proposed'",
                 document,
+                id,
+                version
+            ) == 1
+        );
+    }
+
+    public boolean bindInvoiceDraft(String id, int version, String document, String results) {
+        return (
+            jdbc.update(
+                "UPDATE assistant_plans SET plan_json=?,results_json=?,version=version+1 WHERE id=? AND version=? AND status IN ('proposed','applied')",
+                document,
+                results,
                 id,
                 version
             ) == 1

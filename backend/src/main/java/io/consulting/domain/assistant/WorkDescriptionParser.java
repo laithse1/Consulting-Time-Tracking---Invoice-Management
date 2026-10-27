@@ -40,7 +40,7 @@ public class WorkDescriptionParser {
         "(?<!\\d)([01]?\\d|2[0-3]):([0-5]\\d)\\s*(?:-|–|—|to)\\s*([01]?\\d|2[0-3]):([0-5]\\d)(?!\\d)"
     );
     static final Pattern UNCERTAIN = Pattern.compile(
-        "(?i)\\b(about|approximately|approx|roughly|estimate[ds]?|planned|planning to|plan to|will|todo|need to|not worked|did not|didn't|haven't)\\b|~"
+        "(?i)\\b(about|approximately|approx|roughly|estimate[ds]?|proposed|allocated|allocation|unconfirmed|planned|planning to|plan to|will|todo|need to|not worked|did not|didn't|haven't)\\b|~"
     );
     static final Pattern MONTH = Pattern.compile(
         "(?i)\\b(january|february|march|april|may|june|july|august|september|october|november|december|jan|feb|mar|apr|jun|jul|aug|sep|sept|oct|nov|dec)\\s+(\\d{4})\\b"
@@ -249,6 +249,12 @@ public class WorkDescriptionParser {
             d = null;
             questions.add("Several dates were supplied. Split the work by date.");
         }
+        if (d != null && d.isAfter(reference)) {
+            seconds = 0;
+            questions.add(
+                "Future work cannot be confirmed as performed at this plan's reference date."
+            );
+        }
         if (d == null) questions.add("Work date is missing. Choose the actual date.");
         Integer pid = project(line, projects);
         if (pid == null) pid = projectContext;
@@ -261,7 +267,7 @@ public class WorkDescriptionParser {
         );
         var refs = new ArrayList<String>();
         var urls = Pattern.compile(
-            "https?://[^\\s|]+|(?i)(?:PR|issue|commit)\\s*#?[a-z0-9]+|#\\d+"
+            "https?://[^\\s|]+|(?i)\\b(?:PR|issue)\\s*#?\\d+\\b|\\bcommit\\s+[a-f0-9]{7,40}\\b|#\\d+"
         ).matcher(line);
         while (urls.find()) refs.add(urls.group());
         out.put("type", "log_work");
@@ -289,6 +295,32 @@ public class WorkDescriptionParser {
         LocalDate reference,
         List<Map<String, Object>> projects
     ) {
+        return parse(text, reference, projects, 30);
+    }
+
+    /** A provider's work span is one logical item, even when its evidence spans several lines. */
+    public static Map<String, Object> providerWork(
+        String source,
+        LocalDate reference,
+        List<Map<String, Object>> projects
+    ) {
+        LocalDate context = null;
+        Integer projectContext = null;
+        for (String raw : source.split("\\R")) {
+            String line = raw.strip();
+            if (line.matches("(?i)^(date|day)\\s*:.*")) context = date(line, reference);
+            if (line.matches("(?i)^project\\s*:.*")) projectContext = project(line, projects);
+        }
+        return work(source, reference, context, projectContext, projects);
+    }
+
+    public static List<Map<String, Object>> parse(
+        String text,
+        LocalDate reference,
+        List<Map<String, Object>> projects,
+        int maxActions
+    ) {
+        require(maxActions >= 1 && maxActions <= 30, "Action limit must be between 1 and 30");
         var actions = new ArrayList<Map<String, Object>>();
         LocalDate context = null;
         Integer projectContext = null;
@@ -313,10 +345,23 @@ public class WorkDescriptionParser {
             actions.add(
                 command == null ? work(line, reference, context, projectContext, projects) : command
             );
+            if (actions.size() > maxActions) throw new ActionLimitExceeded(maxActions);
         }
         require(!actions.isEmpty(), "Include a work description or supported command.");
-        require(actions.size() <= 30, "Use at most 30 work items/commands per message.");
         return actions;
+    }
+
+    public static final class ActionLimitExceeded
+        extends io.consulting.domain.DomainValidationException
+    {
+
+        public ActionLimitExceeded(int limit) {
+            super(
+                "Task-line mode supports at most " +
+                    limit +
+                    " actions, including invoice/report commands. Choose Automatic or Narrative notes to retain a long narrative without billing, select a configured language provider to organize it, or split dated tasks into smaller messages. Your saved notes are retained."
+            );
+        }
     }
 
     static Map<String, Object> command(
@@ -352,6 +397,7 @@ public class WorkDescriptionParser {
             t.matches("^invoice\\s+.*")
         ) {
             var m = period(line);
+            var explicit = StructuredWorkIntake.period(line, reference);
             return new LinkedHashMap<>(
                 Map.of(
                     "type",
@@ -359,11 +405,19 @@ public class WorkDescriptionParser {
                     "description",
                     line,
                     "period_start",
-                    m == null ? "" : m.atDay(1).toString(),
+                    !explicit.isEmpty()
+                        ? explicit.getFirst().toString()
+                        : m == null
+                          ? ""
+                          : m.atDay(1).toString(),
                     "period_end",
-                    m == null ? "" : m.atEndOfMonth().toString(),
+                    !explicit.isEmpty()
+                        ? explicit.getLast().toString()
+                        : m == null
+                          ? ""
+                          : m.atEndOfMonth().toString(),
                     "questions",
-                    m == null
+                    m == null && explicit.isEmpty()
                         ? List.of("Choose the service period; no month was assumed.")
                         : List.of()
                 )

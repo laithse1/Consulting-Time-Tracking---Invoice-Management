@@ -63,6 +63,11 @@ jobs:
           trap 'kill "$server_pid" || true' EXIT
           cd frontend
           npm run e2e:assistant
+      - name: Verify invoice drafts and record archive lifecycle
+        run: npm run e2e:lifecycle
+        working-directory: frontend
+        env:
+          E2E_BROWSER_CHANNEL: bundled
       - uses: actions/upload-artifact@v4
         if: failure()
         with:
@@ -71,3 +76,4 @@ jobs:
             backend/target/surefire-reports/
             tmp/e2e-server.log
             tmp/assistant-e2e-server.log
+            tmp/draft-lifecycle-e2e.log

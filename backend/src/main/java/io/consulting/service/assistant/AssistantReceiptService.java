@@ -102,9 +102,15 @@ public class AssistantReceiptService {
             if (text(action, "type").equals("draft_invoice")) {
                 int invoiceId = integer((Map<String, Object>) result.get("invoice"), "id");
                 var invoice = workspace.one("invoices", invoiceId);
+                if (text(invoice, "state").equals("Deleted")) {
+                    action.remove("_invoice_id");
+                    action.put("skip", true);
+                    continue;
+                }
                 require(
                     integer(invoice, "contract_id") == integer(row, "contract_id") &&
-                        text(invoice, "snapshot").isBlank(),
+                        text(invoice, "snapshot").isBlank() &&
+                        !text(invoice, "state").equals("Deleted"),
                     "Only unfinalized invoices can be revised in this conversation"
                 );
                 action.put("_invoice_id", invoiceId);

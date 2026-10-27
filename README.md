@@ -10,7 +10,15 @@
 
 Describe your work, review the facts, and apply a plan that logs time, controls timers, prepares invoice drafts, and generates reports. Local rules work without an LLM. Optional provider profiles add professional invoice wording and conversational corrections through a private server-side configuration file. Your records stay in a database on your own disk.
 
+For free-form narratives, [configure a provider API](docs/configuration.md#enable-a-provider-api-for-narrative-intake). The assistant organizes logical work items, retains reference/instruction context, and asks you to resolve missing facts before billing. Local rules support explicit task lines and preserve oversized narratives as nonbillable notes; they do not provide general language understanding.
+
 Designed for a **single-user consulting workflow**. Financial approvals stay explicit: the system does not invent hours, authorize contractual adjustments, record assumed payments, or send email.
+
+Remove unwanted **Saved conversations** with their **Delete** button. Confirmation removes the conversation from the list without removing work entries, invoices, or linked billing review evidence. This is a soft deletion; retained conversations remain accessible through invoice review links. Current composer notes stay separate.
+
+Create an invoice draft directly from a saved work plan, whether proposed or already applied, then review pending work separately from billable charges. Draft invoices support period/date, presentation, adjustment, and notes edits, plus deletion with retained audit history. Use **Edit** or **Delete** directly in the **All invoices** list, or open **Review** for detailed controls. Saving updates SQLite and refreshes the list; deleting a draft keeps its work entries and expenses available. Work entries and unallocated expenses support deletion; clients, contracts, and projects support archive/restore. Issued invoices use documented withdrawal/replacement to preserve accounting history.
+
+Have a proposed weekly work breakdown? The assistant [reads allocation tables locally](docs/work-assistant.md#proposed-work-tables-and-billing-questions), separates proposed and planned hours from actual time, preserves exact invoice periods, and requires resolution of billing questions. Split tasks into actual daily portions and confirm performed work before enabling invoice preparation.
 
 ![Workspace dashboard](docs/images/dashboard.png)
 
@@ -39,6 +47,10 @@ Screenshots use an isolated demonstration database, not the live financial datab
 | Describe and review work                     | Review an invoice                          |
 | -------------------------------------------- | ------------------------------------------ |
 | ![Work Assistant](docs/images/assistant.png) | ![Invoice review](docs/images/invoice.png) |
+
+Manage draft invoices directly from the list:
+
+![Invoice list with Review, Edit, and Delete actions](docs/images/invoice-list-actions.png)
 
 <details>
 <summary>Dark theme and mobile layout</summary>

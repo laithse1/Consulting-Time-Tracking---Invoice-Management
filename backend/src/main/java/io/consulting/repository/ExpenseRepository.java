@@ -35,6 +35,10 @@ public class ExpenseRepository extends JdbcInsertSupport {
         );
     }
 
+    public void deleteExpense(int id) {
+        jdbc.update("DELETE FROM expenses WHERE id=?", id);
+    }
+
     public int createExpense(
         int contractId,
         String date,

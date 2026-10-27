@@ -22,11 +22,13 @@ export function TimerDialog() {
         <label className="field">
           Project
           <select name="project_id">
-            {projects.map((p) => (
-              <option key={p.id} value={p.id}>
-                {p.name}
-              </option>
-            ))}
+            {projects
+              .filter((p) => !p.archived)
+              .map((p) => (
+                <option key={p.id} value={p.id}>
+                  {p.name}
+                </option>
+              ))}
           </select>
         </label>
         <label className="field">

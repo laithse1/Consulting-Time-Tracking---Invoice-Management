@@ -41,6 +41,7 @@ public class ExpenseService {
             "Positive expense and description required"
         );
         int id = integer(command, "id");
+        if (id == 0) clients.requireActive("contracts", integer(command, "contract_id"));
         if (id == 0) id = repository.createExpense(
             integer(contract, "id"),
             text(command, "expense_date"),
@@ -65,5 +66,17 @@ public class ExpenseService {
         }
         audit.record("expense recorded", "expense:" + id, command);
         return records.findById("expenses", id);
+    }
+
+    @Transactional
+    public void delete(int id, boolean confirmed) {
+        require(confirmed, "Confirm expense deletion");
+        var expense = records.findById("expenses", id);
+        require(
+            repository.countExpenseAllocations(id) == 0,
+            "Issued expenses are immutable; use the invoice correction workflow"
+        );
+        audit.record("expense deleted", "expense:" + id, expense);
+        repository.deleteExpense(id);
     }
 }

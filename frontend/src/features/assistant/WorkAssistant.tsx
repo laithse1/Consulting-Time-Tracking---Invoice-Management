@@ -1,7 +1,8 @@
-import { ArrowUpRight, MessageSquare } from "lucide-react";
+import { ArrowUpRight, MessageSquare, Trash2 } from "lucide-react";
 import { request } from "@/lib/api/client";
 import { AssistantPlanPanel } from "./AssistantPlanPanel";
-import { useState } from "react";
+import { AssistantInputMode, type InputMode } from "./AssistantInputMode";
+import { useState, useEffect } from "react";
 import { today, monthEnd } from "@/lib/dates";
 import type { Plan } from "./types";
 import { useWorkAssistant } from "./useWorkAssistant";
@@ -12,11 +13,13 @@ export default function WorkAssistant({
   cid,
   onRefresh,
   onInvoice,
+  initialPlanId,
 }: {
   data: State;
   cid: number;
   onRefresh: () => Promise<void>;
   onInvoice: (id: number) => void;
+  initialPlanId?: string;
 }) {
   const assistant = useWorkAssistant(data, cid);
   const {
@@ -44,6 +47,46 @@ export default function WorkAssistant({
     reload,
   } = assistant;
   const [prepareInvoice, setPrepareInvoice] = useState(true);
+  const [notice, setNotice] = useState("");
+  function deleteConversation(conversation: Plan) {
+    if (
+      !confirm(
+        "Delete this saved conversation? It will disappear from this list. Work entries, invoices, and linked billing review history will be retained. Your current work-description notes will not be cleared.",
+      )
+    )
+      return;
+    run(async () => {
+      setNotice("");
+      await request(
+        `/assistant/plans/${encodeURIComponent(conversation.id)}?confirmed=true&version=${conversation.version}`,
+        undefined,
+        "DELETE",
+      );
+      if (plan?.id === conversation.id) {
+        setPlan(undefined);
+        setConfirmed(false);
+      }
+      await reload();
+      setNotice("Conversation deleted. Work entries and invoices were preserved.");
+    });
+  }
+  useEffect(() => {
+    if (!initialPlanId) return;
+    let active = true;
+    request<Plan>(`/assistant/plans/${initialPlanId}`)
+      .then((saved) => {
+        if (active) {
+          setPlan(saved);
+          setConfirmed(false);
+        }
+      })
+      .catch((failure) => active && setError(failure.message));
+    return () => {
+      active = false;
+    };
+  }, [initialPlanId]);
+  const [inputMode, setInputMode] = useState<InputMode>("auto");
+  const narrativeOnly = !provider && inputMode === "narrative";
   const [periodStart, setPeriodStart] = useState(today().slice(0, 7) + "-01");
   const [periodEnd, setPeriodEnd] = useState(
     today().slice(0, 7) + "-" + monthEnd(today().slice(0, 7)),
@@ -116,6 +159,15 @@ export default function WorkAssistant({
             </select>
           </label>
         </div>
+        {!provider && (
+          <AssistantInputMode
+            history={history}
+            source={source}
+            mode={inputMode}
+            onChange={setInputMode}
+            busy={busy}
+          />
+        )}
         {provider && (
           <label className="assistant-check">
             <input
@@ -130,13 +182,13 @@ export default function WorkAssistant({
         <label className="assistant-check">
           <input
             type="checkbox"
-            checked={prepareInvoice}
-            disabled={busy}
+            checked={prepareInvoice && !narrativeOnly}
+            disabled={busy || narrativeOnly}
             onChange={(event) => setPrepareInvoice(event.target.checked)}
           />
           Prepare an invoice after logging the reviewed work
         </label>
-        {prepareInvoice && (
+        {prepareInvoice && !narrativeOnly && (
           <div className="form-grid">
             <label className="field">
               Invoice period start
@@ -174,7 +226,8 @@ export default function WorkAssistant({
                 reference_date: reference,
                 provider_id: provider,
                 provider_consent: consent,
-                prepare_invoice: prepareInvoice,
+                input_mode: inputMode,
+                prepare_invoice: prepareInvoice && !narrativeOnly,
                 period_start: periodStart,
                 period_end: periodEnd,
               });
@@ -225,30 +278,53 @@ export default function WorkAssistant({
         </div>
       )}
       <AssistantPlanPanel assistant={assistant} onRefresh={onRefresh} onInvoice={onInvoice} />
+      {notice && (
+        <p className="notice" role="status">
+          {notice}
+        </p>
+      )}
       {!!history?.plans.length && (
         <section className="panel">
           <h2>Saved conversations</h2>
           <p className="small muted">
             Your latest {history.limits?.history ?? 50} plans. Source messages, edits, and receipts
-            are stored in your database.
+            are stored in your database. Deleting a conversation keeps its saved work, invoices, and
+            linked billing review history.
           </p>
           <div className="assistant-history">
             {history.plans.map((p) => (
-              <button
-                className={`assistant-history-item ${plan?.id === p.id ? "selected" : ""}`}
+              <div
+                className={`assistant-history-row ${plan?.id === p.id ? "selected" : ""}`}
                 key={p.id}
-                disabled={busy}
-                onClick={() => {
-                  setPlan(p);
-                  setConfirmed(false);
-                  setError("");
-                }}
               >
-                <span>{p.source.slice(0, 110)}</span>
-                <small>
-                  {p.status} · {new Date(p.created).toLocaleString()}
-                </small>
-              </button>
+                <button
+                  className="assistant-history-item"
+                  disabled={busy}
+                  onClick={() => {
+                    setPlan(p);
+                    setConfirmed(false);
+                    setError("");
+                  }}
+                >
+                  <span>{p.source.slice(0, 110)}</span>
+                  <small>
+                    {p.status} · {new Date(p.created).toLocaleString()}
+                    {p.status === "proposed" && !p.actions.some((action) => action._invoice_id)
+                      ? " · Plan saved; no invoice yet — open to review or create draft"
+                      : p.actions.some((action) => action._invoice_id)
+                        ? " · Invoice draft linked"
+                        : ""}
+                  </small>
+                </button>
+                <button
+                  className="text-btn assistant-history-delete"
+                  disabled={busy}
+                  aria-label={`Delete conversation: ${p.source.slice(0, 110)}`}
+                  onClick={() => deleteConversation(p)}
+                >
+                  <Trash2 size={16} aria-hidden="true" /> Delete
+                </button>
+              </div>
             ))}
           </div>
         </section>

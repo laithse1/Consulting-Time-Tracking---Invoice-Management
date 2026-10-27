@@ -1,0 +1,38 @@
+October 1–30 spans five calendar workweeks, with October 1–2 being a partial week. Allocating 16 hours to each gives 80 hours. Confirm that the partial week also qualifies for 16 hours. Also, as today is October 25, October 26–30 must remain planned until worked.
+Proposed Work Breakdown
+Period	Work description	Hours
+Oct 1–2	Prepare the Georgia Tech Geo MCP codebase and relevant supporting materials for transfer into XR Navigation’s GitHub environment; organize repository content and review setup requirements. Transfer issue #1.	5
+	Review ACR accessibility reports and investigate skip-link labels, redundant navigation controls, and duplicate keyboard tab stops. ACR sub-issues #4–#6.	6
+	Address reported speech-log DOM ordering and missing dropdown focus indication; investigate the avatar popup’s visual/screen-reader discrepancy. ACR sub-issues #7–#9.	5
+Oct 5–9	Develop versioned map-session context covering datasets, layers, selections, metrics, units and revisions; handle stale context and ambiguous references. Audiom Chat #2.	7
+	Develop the map-style update contract and classification validation for recoloring, highlighting, palettes, missing values and stable feature identifiers. Audiom Chat #1.	6
+	Add focused context/style tests and document integration assumptions and limitations.	3
+Oct 12–16	Implement map-client integration, update acknowledgements, reset/undo behavior, keyboard interaction and text alternatives for map changes. Audiom Chat #1.	6
+	Implement deterministic aggregates, dispersion, similarity and spatial-statistics support with explicit scope, assumptions and diagnostics. Audiom Chat #4.	6
+	Develop the GeoVisA11y/MEP coverage-audit workflow, provenance validation and capability inventory; document missing research inputs and independent-review requirements. Audiom Chat #3.	4
+Oct 19–23	Inspect Audiom backend/frontend contracts; implement account authentication, secure credential storage and organization-aware API access. Audiom Front End #2409.	5
+	Implement MCP map discovery, map-definition creation/editing/deletion, bounded OSM map creation and compiled-layer retrieval. #2409.	5
+	Implement signed task-event intake, durable duplicate protection, local approval and optional channel notifications; add API documentation and tests. #2409.	6
+Oct 26–30 — planned	Follow up on ACR accessibility findings, particularly the unresolved avatar popup; verify fixes and document remaining limitations.	4
+	Review the issue-specific PRs, address feedback, check dependencies and complete integration acceptance checks where staging access permits.	5
+	Run further regression and installation checks; troubleshoot MCP-client configuration and verify supported authentication/event workflows.	4
+	Update README, testing instructions, API documentation and issue status; prepare developer handoff and review notes.	3
+	Proposed total, including planned work	80
+
+The PR split was already completed on October 25. Record that work on its actual date within the October 19–25 week, adjusting the allocations above rather than counting it again the following week.
+Prompt for Your Invoice Tool
+Create a professional developer-services invoice for Laith M. Alkhalil, addressed to XR Navigation, covering October 1–30, 2026.
+
+Use the reviewed work breakdown above as detailed service line items. The proposed allocation is 16 hours per calendar week, totaling 80 hours, including 5 hours for the Georgia Tech-to-XR Navigation repository migration. Confirm the partial first week’s billing arrangement. Use my configured hourly rate; do not invent a rate, payment terms or company billing details.
+
+Describe the services as:
+
+Software engineering for accessible map interaction and Audiom integration: repository migration and preparation; accessibility issue investigation and remediation; conversational map-context management; accessible map styling; deterministic statistical analysis; MEP coverage-audit tooling; authenticated Audiom MCP tools; secure local task-event delivery; automated testing; documentation; and issue-specific pull-request preparation.
+
+Associate the work with:
+- Transfer Geo MCP from Georgia Tech to XR Navigation, issue #1.
+- ACR Testing Issues #3 and sub-issues #4–#9.
+- xrnavigation/audiom-chat-engine issues #1–#4.
+- Coughlan-Lab/Audiom-Front-End issue #2409.
+- Review deliverables: xrnavigation/audiom-chat-engine PRs #6–#10.
+Accuracy requirements: Treat this as a draft until actual hours are confirmed. Exclude future or unperformed work from the final invoice. Do not describe all issues as closed or production-complete: the coverage audit, live Audiom deployment verification and some accessibility acceptance checks remain outstanding. Bill documented engineering work performed, not an unsupported claim of final acceptance.

@@ -1,4 +1,5 @@
 export const titles: Record<string, string> = {
+  save_note: "Retain nonbillable notes",
   log_work: "Log work",
   start_timer: "Start timer",
   pause_timer: "Pause timer",

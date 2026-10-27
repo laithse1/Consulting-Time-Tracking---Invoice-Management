@@ -134,6 +134,91 @@ public class InvoiceService {
     }
 
     @Transactional
+    public Map<String, Object> editDraft(int id, Map<String, Object> command) {
+        var invoice = editableDraft(id, text(command, "expected_token"));
+        var from = LocalDate.parse(text(command, "period_start"));
+        var to = LocalDate.parse(text(command, "period_end"));
+        require(
+            !to.isBefore(from) && to.toEpochDay() - from.toEpochDay() <= 366,
+            "Invalid service period"
+        );
+        String date = LocalDate.parse(text(command, "invoice_date")).toString();
+        String presentation = text(command, "presentation");
+        require(
+            Set.of("itemized", "grouped").contains(presentation),
+            "Choose itemized or grouped presentation"
+        );
+        var adjustment = money(command.getOrDefault("adjustment", "0"));
+        require(adjustment.signum() >= 0, "Adjustment cannot be negative");
+        require(
+            adjustment.signum() == 0 ||
+                (!text(command, "adjustment_reason").isBlank() &&
+                    !text(command, "adjustment_approval").isBlank()),
+            "Adjustment needs documented reason and explicit manual approval reference"
+        );
+        audit.record("invoice draft before edit", "invoice:" + id, invoice);
+        repository.editDraft(
+            id,
+            from.toString(),
+            to.toString(),
+            date,
+            presentation,
+            adjustment.toPlainString(),
+            text(command, "adjustment_reason"),
+            text(command, "adjustment_approval"),
+            text(command, "notes")
+        );
+        synchronizePlans(id, false, from.toString(), to.toString());
+        audit.record("invoice draft edited", "invoice:" + id, command);
+        return queries.preview(id);
+    }
+
+    @Transactional
+    public void deleteDraft(int id, String expectedToken, boolean confirmed) {
+        require(confirmed, "Confirm draft invoice deletion");
+        var invoice = editableDraft(id, expectedToken);
+        audit.record("invoice draft deleted", "invoice:" + id, invoice);
+        repository.deleteDraft(id);
+        synchronizePlans(id, true, "", "");
+    }
+
+    private Map<String, Object> editableDraft(int id, String expectedToken) {
+        var invoice = records.findById("invoices", id);
+        require(
+            text(invoice, "state").equals("Draft") &&
+                text(invoice, "snapshot").isBlank() &&
+                repository.countPayments(id) == 0,
+            "Only an unfinalized draft can be edited or deleted. Use withdrawal/replacement for an issued unpaid invoice."
+        );
+        require(
+            !expectedToken.isBlank() && documents.fingerprint(invoice).equals(expectedToken),
+            "Invoice changed; reload it before editing or deleting"
+        );
+        return invoice;
+    }
+
+    private void synchronizePlans(int invoiceId, boolean deleted, String from, String to) {
+        for (var row : repository.linkedPlans(invoiceId)) {
+            var document = documents.decode(text(row, "plan_json"));
+            for (var action : (List<Map<String, Object>>) document.get("actions")) {
+                if (integer(action, "_invoice_id") != invoiceId) continue;
+                if (deleted) {
+                    action.remove("_invoice_id");
+                    action.put("skip", true);
+                } else {
+                    action.put("period_start", from);
+                    action.put("period_end", to);
+                }
+            }
+            repository.synchronizePlan(
+                text(row, "id"),
+                integer(row, "version"),
+                documents.encode(document)
+            );
+        }
+    }
+
+    @Transactional
     public Object transition(int id, Map<String, Object> command) {
         var invoice = records.findById("invoices", id);
         String target = text(command, "state");

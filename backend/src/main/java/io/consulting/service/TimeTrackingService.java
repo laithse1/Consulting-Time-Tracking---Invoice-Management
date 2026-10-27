@@ -43,6 +43,7 @@ public class TimeTrackingService {
         int id = integer(command, "id"),
             contractId = integer(command, "contract_id");
         var contract = clients.contract(contractId);
+        if (id == 0) clients.requireActive("contracts", contractId);
         require(
             id == 0 || repository.countEntryAllocations(id) == 0,
             "Issued time is immutable; use a replacement invoice"
@@ -64,6 +65,7 @@ public class TimeTrackingService {
         require(!text(command, "category").isEmpty(), "Category required");
         Integer projectId =
             integer(command, "project_id") == 0 ? null : integer(command, "project_id");
+        if (projectId != null && id == 0) clients.requireActive("projects", projectId);
         if (projectId != null) require(
             integer(records.findById("projects", projectId), "client_id") ==
                 integer(contract, "client_id"),
@@ -138,6 +140,11 @@ public class TimeTrackingService {
         if (action.equals("start")) {
             require(timers.isEmpty(), "A timer already exists");
             var timerContract = clients.contract(integer(command, "contract_id"));
+            clients.requireActive("contracts", integer(command, "contract_id"));
+            if (integer(command, "project_id") > 0) clients.requireActive(
+                "projects",
+                integer(command, "project_id")
+            );
             var workDate = LocalDate.parse(text(command, "work_date"));
             require(
                 !workDate.isBefore(LocalDate.parse(text(timerContract, "start_date"))) &&

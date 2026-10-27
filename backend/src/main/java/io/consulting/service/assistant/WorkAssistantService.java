@@ -5,6 +5,8 @@ import static io.consulting.domain.DomainValues.require;
 import static io.consulting.domain.DomainValues.text;
 
 import io.consulting.config.ApplicationProperties;
+import io.consulting.domain.assistant.LocalWorkPlanParser;
+import io.consulting.domain.assistant.StructuredWorkIntake;
 import io.consulting.domain.assistant.WorkDescriptionParser;
 import io.consulting.integration.ai.HttpJsonProviderClient;
 import io.consulting.repository.AssistantRepository;
@@ -94,6 +96,27 @@ public class WorkAssistantService {
         return out;
     }
 
+    public Map<String, Object> getPlan(String id) {
+        return unpack(planRow(id));
+    }
+
+    /** Remove from saved history without removing linked ledger facts or billing safeguards. */
+    @Transactional
+    public void deleteConversation(String id, int version, boolean confirmed) {
+        require(confirmed, "Confirm deleting this conversation");
+        var row = planRow(id);
+        if (!text(row, "deleted_at").isBlank()) return;
+        require(
+            repository.deleteConversation(id, version),
+            "Conversation changed; reload before deleting it"
+        );
+        workspace.audit(
+            "assistant conversation deleted",
+            "assistant:" + id,
+            Map.of("version", version, "linked_records_preserved", true)
+        );
+    }
+
     Map<String, Object> planRow(String id) {
         var rows = repository.findPlan(id);
         require(!rows.isEmpty(), "Assistant plan not found");
@@ -122,8 +145,24 @@ public class WorkAssistantService {
         LocalDate reference = LocalDate.parse(text(command, "reference_date"));
         var projects = repository.findProjects(integer(contract, "client_id"));
         String engine = text(command, "provider_id");
+        String inputMode = text(command, "input_mode");
+        if (inputMode.isBlank()) inputMode = "auto";
         List<Map<String, Object>> actions;
-        if (engine.isBlank()) actions = WorkDescriptionParser.parse(source, reference, projects);
+        var structured = inputMode.equals("narrative")
+            ? List.<Map<String, Object>>of()
+            : StructuredWorkIntake.parse(source, reference, projects);
+        if (!structured.isEmpty() && !inputMode.equals("lines")) {
+            actions = structured;
+            engine = ""; // Explicit tables need no model request or network consent.
+            var invoice = StructuredWorkIntake.invoice(source, reference);
+            if (invoice != null) actions.add(invoice);
+        } else if (engine.isBlank()) actions = LocalWorkPlanParser.parse(
+            source,
+            reference,
+            projects,
+            inputMode,
+            properties.assistant().maxActions()
+        );
         else {
             require(
                 Boolean.TRUE.equals(command.get("provider_consent")),
@@ -131,10 +170,46 @@ public class WorkAssistantService {
             );
             actions = new ArrayList<>();
             for (var segment : providers.extract(engine, source, projects)) {
-                var parsed = WorkDescriptionParser.parse(
-                    segment.get("source"),
-                    reference,
-                    projects
+                if (segment.getOrDefault("kind", "work").equals("context")) {
+                    actions.add(
+                        new LinkedHashMap<>(
+                            Map.of(
+                                "type",
+                                "save_note",
+                                "description",
+                                "Retain references, instructions, or unperformed work as nonbillable context.",
+                                "source_text",
+                                segment.get("source"),
+                                "questions",
+                                List.of(
+                                    "These notes are context, not completed work. They do not generate time entries or charges."
+                                )
+                            )
+                        )
+                    );
+                    continue;
+                }
+                String span = segment.get("source");
+                // Legacy profiles may omit kind for a command. Recognize only a single explicit
+                // command line locally; multiline work evidence remains one proposed work item.
+                List<Map<String, Object>> parsed;
+                String kind = segment.getOrDefault("kind", "auto");
+                if (
+                    kind.equals("command") ||
+                    (kind.equals("auto") && span.strip().lines().count() == 1)
+                ) {
+                    parsed = WorkDescriptionParser.parse(
+                        span,
+                        reference,
+                        projects,
+                        properties.assistant().maxActions()
+                    );
+                } else parsed = List.of(
+                    WorkDescriptionParser.providerWork(span, reference, projects)
+                );
+                if (kind.equals("command")) require(
+                    parsed.stream().noneMatch(action -> text(action, "type").equals("log_work")),
+                    "Provider returned an unsupported command. No actions were applied."
                 );
                 for (var action : parsed) {
                     if (!text(action, "type").equals("log_work")) {
@@ -182,7 +257,9 @@ public class WorkAssistantService {
                         "period_end",
                         to.toString(),
                         "require_complete_work",
-                        true
+                        true,
+                        "skip",
+                        !structured.isEmpty() && !inputMode.equals("lines")
                     )
                 )
             );
@@ -195,10 +272,13 @@ public class WorkAssistantService {
                     : 0
             )
         );
-        require(
-            actions.size() <= properties.assistant().maxActions(),
-            "Message exceeds the configured action limit"
-        );
+        if (actions.size() > properties.assistant().maxActions()) {
+            if (engine.isBlank() && inputMode.equals("auto")) actions =
+                LocalWorkPlanParser.narrative(source);
+            else throw new WorkDescriptionParser.ActionLimitExceeded(
+                properties.assistant().maxActions()
+            );
+        }
         // A foreign client's name in the source requires an explicit manual correction of the plan.
         for (var client : repository.findOtherClients(integer(contract, "client_id")))
             if (
@@ -250,7 +330,17 @@ public class WorkAssistantService {
                 !a.containsKey("skip") || a.get("skip") instanceof Boolean,
                 "Task inclusion must be a boolean"
             );
-            for (String field : List.of("_entry_id", "_entry_baseline", "_invoice_id"))
+            for (String field : List.of(
+                "_entry_id",
+                "_entry_baseline",
+                "_invoice_id",
+                "source_text",
+                "requires_resolution",
+                "proposed_hours",
+                "allocation_start",
+                "allocation_end",
+                "work_state"
+            ))
                 require(
                     java.util.Objects.equals(a.get(field), previous.get(i).get(field)),
                     "Saved record references cannot be changed"
@@ -268,6 +358,10 @@ public class WorkAssistantService {
                 "Action type cannot be changed"
             );
             require(workspace.encode(a).length() <= 40000, "Action is too large");
+            if (Boolean.TRUE.equals(a.get("requires_resolution"))) require(
+                a.get("resolved") instanceof Boolean,
+                "Question resolution must be a boolean"
+            );
             if (text(a, "type").equals("log_work")) {
                 if (a.get("seconds") == null) a.put("seconds", 0);
                 require(
@@ -301,6 +395,205 @@ public class WorkAssistantService {
         return unpack(planRow(id));
     }
 
+    /** Creates the review document independently of logging or confirming work. */
+    @Transactional
+    public Map<String, Object> invoiceDraft(String id, int version, String from, String to) {
+        var row = planRow(id);
+        require(
+            integer(row, "version") == version &&
+                java.util.Set.of("proposed", "applied").contains(text(row, "status")),
+            "Reload the saved plan before creating its invoice draft"
+        );
+        var actions = (List<Map<String, Object>>) workspace
+            .decode(text(row, "plan_json"))
+            .get("actions");
+        var action = actions
+            .stream()
+            .filter(a -> text(a, "type").equals("draft_invoice"))
+            .findFirst()
+            .orElse(null);
+        if (action != null && integer(action, "_invoice_id") > 0) return Map.of(
+            "plan",
+            unpack(row),
+            "preview",
+            workspace.preview(integer(action, "_invoice_id"))
+        );
+        if (action == null) {
+            require(
+                actions.size() < properties.assistant().maxActions(),
+                "Action limit reached; create a draft from Invoices instead"
+            );
+            action = new LinkedHashMap<>(
+                Map.of(
+                    "type",
+                    "draft_invoice",
+                    "description",
+                    "Prepare invoice from reviewed work",
+                    "skip",
+                    true
+                )
+            );
+            actions.add(action);
+        }
+        boolean applied = text(row, "status").equals("applied");
+        var results = text(row, "results_json").isBlank()
+            ? new ArrayList<Map<String, Object>>()
+            : new ArrayList<>(
+                  (List<Map<String, Object>>) workspace
+                      .decode(text(row, "results_json"))
+                      .get("results")
+              );
+        int cursor = 0;
+        for (var result : results) {
+            if (!result.containsKey("action_index")) {
+                while (
+                        cursor < actions.size() &&
+                        (!text(actions.get(cursor), "type").equals(text(result, "type")) ||
+                            (Boolean.TRUE.equals(actions.get(cursor).get("skip")) &&
+                                integer(actions.get(cursor), "_entry_id") == 0))
+                    )
+                    cursor++;
+                require(
+                    cursor < actions.size(),
+                    "Saved receipt does not match its plan; review the records in Invoices"
+                );
+                result.put("action_index", cursor);
+            }
+            cursor = integer(result, "action_index") + 1;
+        }
+        int invoiceIndex = actions.indexOf(action);
+        int existingInvoice = results
+            .stream()
+            .filter(
+                result ->
+                    text(result, "type").equals("draft_invoice") &&
+                    integer(result, "action_index") == invoiceIndex
+            )
+            .map(result -> integer((Map<String, Object>) result.get("invoice"), "id"))
+            .findFirst()
+            .orElse(0);
+        if (
+            existingInvoice > 0 &&
+            text(workspace.one("invoices", existingInvoice), "state").equals("Deleted")
+        ) existingInvoice = 0;
+        var preview =
+            existingInvoice > 0
+                ? workspace.preview(existingInvoice)
+                : workspace.draft(
+                      Map.of(
+                          "contract_id",
+                          integer(row, "contract_id"),
+                          "period_start",
+                          from,
+                          "period_end",
+                          to,
+                          "adjustment",
+                          "0"
+                      )
+                  );
+        var invoice = (Map<String, Object>) preview.get("invoice");
+        action.put("period_start", text(invoice, "period_start"));
+        action.put("period_end", text(invoice, "period_end"));
+        action.put("_invoice_id", integer((Map<String, Object>) preview.get("invoice"), "id"));
+        if (applied) {
+            results.removeIf(
+                result ->
+                    text(result, "type").equals("draft_invoice") &&
+                    integer(result, "action_index") == invoiceIndex
+            );
+            results.add(
+                new LinkedHashMap<>(
+                    Map.of(
+                        "type",
+                        "draft_invoice",
+                        "action_index",
+                        invoiceIndex,
+                        "invoice",
+                        invoice,
+                        "preview",
+                        preview,
+                        "warnings",
+                        preview.get("warnings"),
+                        "total",
+                        preview.get("total")
+                    )
+                )
+            );
+        }
+        require(
+            repository.bindInvoiceDraft(
+                id,
+                version,
+                workspace.encode(Map.of("actions", actions)),
+                applied ? workspace.encode(Map.of("results", results)) : text(row, "results_json")
+            ),
+            "Plan changed; reload before creating its invoice"
+        );
+        workspace.audit(
+            "assistant invoice draft created",
+            "assistant:" + id,
+            Map.of("invoice_id", action.get("_invoice_id"))
+        );
+        return Map.of(
+            "plan",
+            unpack(planRow(id)),
+            "preview",
+            workspace.preview(integer(action, "_invoice_id"))
+        );
+    }
+
+    /** Adds a blank daily portion without duplicating allocated hours or saved ledger targets. */
+    @Transactional
+    public Map<String, Object> split(String id, int version, int index) {
+        var row = planRow(id);
+        require(
+            text(row, "status").equals("proposed") && integer(row, "version") == version,
+            "Plan changed or is already applied; reload before splitting a task"
+        );
+        var actions = (List<Map<String, Object>>) workspace
+            .decode(text(row, "plan_json"))
+            .get("actions");
+        require(index >= 0 && index < actions.size(), "Choose an existing task");
+        require(
+            actions.size() < properties.assistant().maxActions(),
+            "The action limit is reached; use another message for additional daily entries"
+        );
+        var original = actions.get(index);
+        require(
+            text(original, "type").equals("log_work") && integer(original, "_entry_id") == 0,
+            "Split only work that has not been saved to the time ledger"
+        );
+        var portion = new LinkedHashMap<>(original);
+        for (String field : List.of(
+            "proposed_hours",
+            "_entry_id",
+            "_entry_baseline",
+            "_invoice_id"
+        ))
+            portion.remove(field);
+        portion.put("seconds", 0);
+        portion.put("work_date", "");
+        portion.put("start_time", "");
+        portion.put("draft", 1);
+        portion.put("skip", false);
+        portion.put(
+            "questions",
+            List.of(
+                "Additional daily portion of the original task. Enter this day's actual date and duration; the allocation has not been duplicated. Reconcile all portions against actual work."
+            )
+        );
+        actions.add(portion); // Existing action indices and receipt bindings remain stable.
+        require(
+            repository.updateProposedPlan(
+                id,
+                version,
+                workspace.encode(Map.of("actions", actions))
+            ),
+            "Plan changed in another window; reload before splitting"
+        );
+        return unpack(planRow(id));
+    }
+
     @Transactional
     public Map<String, Object> apply(String id, Map<String, Object> request) {
         var row = planRow(id);
@@ -324,6 +617,24 @@ public class WorkAssistantService {
             .stream()
             .anyMatch(
                 a -> text(a, "type").equals("draft_invoice") && !Boolean.TRUE.equals(a.get("skip"))
+            );
+        if (preparingInvoice) for (var action : actions)
+            require(
+                !Boolean.TRUE.equals(action.get("requires_resolution")) ||
+                    Boolean.TRUE.equals(action.get("resolved")),
+                "Resolve the allocation and billing questions before preparing an invoice."
+            );
+        for (var action : actions)
+            if (
+                text(action, "type").equals("log_work") &&
+                !Boolean.TRUE.equals(action.get("skip")) &&
+                integer(action, "draft") == 0 &&
+                !text(action, "work_date").isBlank()
+            ) require(
+                !LocalDate.parse(text(action, "work_date")).isAfter(
+                    LocalDate.parse(text(row, "reference_date"))
+                ),
+                "Future work cannot be confirmed as performed at this plan's reference date. Create a new plan after the work is performed."
             );
         if (preparingInvoice) for (var action : actions) {
             if (
@@ -355,14 +666,35 @@ public class WorkAssistantService {
                 );
             }
         }
-        for (int actionIndex = 0; actionIndex < actions.size(); actionIndex++) {
+        // Splitting appends to preserve receipt identities; execute all work before invoice/report snapshots.
+        var executionOrder = java.util.stream.IntStream.range(0, actions.size())
+            .boxed()
+            .sorted(
+                java.util.Comparator.comparingInt(index ->
+                    java.util.Set.of("draft_invoice", "report", "compliance").contains(
+                        text(actions.get(index), "type")
+                    )
+                        ? 1
+                        : 0
+                )
+            )
+            .toList();
+        for (int actionIndex : executionOrder) {
             var a = actions.get(actionIndex);
-            if (Boolean.TRUE.equals(a.get("skip")) && integer(a, "_entry_id") == 0) continue;
+            if (
+                Boolean.TRUE.equals(a.get("skip")) &&
+                integer(a, "_entry_id") == 0 &&
+                integer(a, "_invoice_id") == 0
+            ) continue;
             String type = text(a, "type");
             var result = new LinkedHashMap<String, Object>();
             result.put("type", type);
             result.put("action_index", actionIndex);
             switch (type) {
+                case "save_note" -> result.put(
+                    "note",
+                    "Original notes retained in this conversation. This note action did not create time entries or charges."
+                );
                 case "log_work" -> {
                     var entry = new HashMap<>(a);
                     entry.remove("id");

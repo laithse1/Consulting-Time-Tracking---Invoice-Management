@@ -1,5 +1,7 @@
 # Development guide
 
+The invoice/record lifecycle browser workflow runs with `npm run e2e:lifecycle` from `frontend` after packaging. It launches a disposable SQLite instance on port 18084 and stops it on exit. It covers draft creation from a proposed plan, pending work, period edits, deletion, client/contract/project archive/restore, and project editing. `E2E_JAR` selects an alternate packaged jar; `E2E_BROWSER_CHANNEL=bundled` selects installed Playwright Chromium. CI includes this workflow alongside the existing assistant and financial workflows. Never use production data for browser tests.
+
 ## Build the repository
 
 Use Java 21+, Maven 3.9+, Node.js 22.12+, npm, and PowerShell 7+ for the Windows scripts. Docker Desktop is an alternative runtime/build environment. Dependency versions are controlled by the Maven parent/properties and npm lockfile.

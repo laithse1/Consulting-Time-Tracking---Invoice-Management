@@ -19,19 +19,68 @@ public class ClientService {
     private final ClientRepository repository;
     private final RecordRepository records;
     private final AuditService audit;
+    private final io.consulting.repository.RecordLifecycleRepository lifecycle;
 
     public ClientService(
         ClientRepository repository,
         RecordRepository records,
-        AuditService audit
+        AuditService audit,
+        io.consulting.repository.RecordLifecycleRepository lifecycle
     ) {
         this.repository = repository;
         this.records = records;
         this.audit = audit;
+        this.lifecycle = lifecycle;
     }
 
     public Map<String, Object> contract(int id) {
         return records.findById("contracts", id);
+    }
+
+    public boolean archived(String type, int id) {
+        var row = records.findById(type, id);
+        return (
+            lifecycle.archived(type, id) ||
+            (!type.equals("clients") && lifecycle.archived("clients", integer(row, "client_id")))
+        );
+    }
+
+    public void requireActive(String type, int id) {
+        require(
+            !archived(type, id),
+            "This " + type + " record or its client is archived. Restore it before adding new work."
+        );
+    }
+
+    public java.util.List<Map<String, Object>> archiveState(
+        String type,
+        java.util.List<Map<String, Object>> rows
+    ) {
+        return rows
+            .stream()
+            .map(row -> {
+                var out = new java.util.LinkedHashMap<>(row);
+                out.put("archived", archived(type, integer(row, "id")));
+                out.put("archived_self", lifecycle.archived(type, integer(row, "id")));
+                return (Map<String, Object>) out;
+            })
+            .toList();
+    }
+
+    @Transactional
+    public void archive(String type, int id, boolean archived, boolean confirmed) {
+        require(
+            java.util.Set.of("clients", "contracts", "projects").contains(type),
+            "Unknown archive record type"
+        );
+        require(confirmed, "Confirm this archive or restore action");
+        var row = records.findById(type, id);
+        require(
+            !archived || !lifecycle.hasTimer(type, id),
+            "Stop the active timer before archiving this record"
+        );
+        lifecycle.archive(type, id, archived);
+        audit.record(archived ? "record archived" : "record restored", type + ":" + id, row);
     }
 
     @Transactional
@@ -60,8 +109,13 @@ public class ClientService {
         require(!name.isEmpty(), "Project name required");
         int id = integer(command, "id");
         if (id == 0) {
+            requireActive("clients", clientId);
             id = repository.createProject(clientId, name, repositoryUrl);
         } else {
+            require(
+                integer(records.findById("projects", id), "client_id") == clientId,
+                "A project's client cannot be reassigned"
+            );
             repository.updateProject(id, name, repositoryUrl);
         }
         audit.record("project saved", "project:" + id, command);
@@ -102,8 +156,13 @@ public class ClientService {
         };
         int id = integer(command, "id");
         if (id == 0) {
+            requireActive("clients", clientId);
             id = repository.createContract(fields);
         } else {
+            require(
+                integer(contract(id), "client_id") == clientId,
+                "A contract's client cannot be reassigned"
+            );
             repository.updateContract(id, fields);
         }
         audit.record("contract saved", "contract:" + id, command);

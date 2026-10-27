@@ -7,7 +7,12 @@ import { formData } from "@/lib/forms";
 export function ContractDialog() {
   const { modal, contract, setModal, act, data } = useWorkspaceData();
   return (() => {
-    const c = modal === "contract" ? contract : undefined;
+    const c =
+      modal === "contract"
+        ? contract
+        : modal.startsWith("contract:")
+          ? data.contracts.find((item) => item.id === Number(modal.slice(9)))
+          : undefined;
     return (
       <Modal title={c ? "Edit contract" : "Add contract"} onClose={() => setModal("")}>
         <form
@@ -19,11 +24,13 @@ export function ContractDialog() {
           <label className="field">
             Client
             <select name="client_id" defaultValue={c?.client_id}>
-              {data.clients.map((cl) => (
-                <option value={cl.id} key={cl.id}>
-                  {cl.name}
-                </option>
-              ))}
+              {data.clients
+                .filter((cl) => (c ? cl.id === c.client_id : !cl.archived))
+                .map((cl) => (
+                  <option value={cl.id} key={cl.id}>
+                    {cl.name}
+                  </option>
+                ))}
             </select>
           </label>
           <Input label="Contractor name" name="contractor" value={c?.contractor} required />

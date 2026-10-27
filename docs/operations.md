@@ -1,5 +1,25 @@
 # Operations and recovery
 
+## Editing, deleting, and archiving records
+
+Saved conversations have a **Delete** button beside each row. Confirmation removes them from recent history, closes the selected conversation, and persists a soft-deletion marker with an audit event. It does not erase source messages, revisions, receipts, composer notes, work entries, or invoices. Invoice-linked review and correction access remains available, including all unresolved billing safeguards. Reload before retrying if another tab changed the plan version.
+
+| Record                    | Available operation                                                                   | History protection                                                                                                       |
+| ------------------------- | ------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------ |
+| Invoice draft             | Edit period, invoice date, presentation, approved adjustment, and notes; delete draft | Number stays reserved; prior edits/deletion remain audited; source work and expenses remain                              |
+| Finalized invoice         | Withdraw an unpaid invoice and create a documented replacement                        | Issued snapshot and payment history are retained; paid invoices require an accounting correction outside direct deletion |
+| Work entry                | Edit/delete from Time Tracker or an editable invoice's work table                     | Allocated issued work is protected; prior contents remain audited                                                        |
+| Expense                   | Edit/delete using its Review dialog                                                   | Allocated issued expenses are protected; deletion is audited                                                             |
+| Client, contract, project | Edit and archive/restore from their management screens                                | Relationships and historical work/invoices/payments remain intact; no cascade deletion                                   |
+
+Open a saved conversation, whether proposed or already applied, and choose **Create invoice draft** to create or open its document without replaying work. Draft previews show pending and planned rows separately from billable totals. Return to the exact linked plan through **Review linked work in Work Assistant**. Existing invoice receipts are reused; financial confirmation/finalization remains explicit.
+
+Draft edits/deletion require the current preview token. If another window changed the invoice, reload it and review the latest version. Invoice-period changes update linked assistant plans and invalidate stale plan versions. Deleted drafts disappear from active lists but retain their number in SQLite; never renumber later invoices to close a gap.
+
+Archived records are labeled and remain available for historical review. A client's effective archive state also applies to its contracts/projects; restoring the client preserves any independent child archive. Stop an active timer before archiving its owner. Restore a record before adding new work under it. Existing work may still be corrected and invoiced, and payments on historical invoices can still be recorded.
+
+Flyway V4 adds `record_archives` without rewriting existing business tables. No `.env` or provider configuration changes are needed. Back up the database before upgrades as described below.
+
 ## Runtime and storage
 
 The packaged app runs one Spring Boot process serving the React assets and REST API. Compose binds `127.0.0.1:<APP_PORT>` to container port 8080 and bind-mounts `<DATA_DIR>/consulting.db` at `/app/data/consulting.db`. Provider profiles are read from the read-only `/app/config` mount. Keep provider files and database/backups private.
@@ -64,6 +84,12 @@ A rollback of application binaries does not roll back a schema migration. Use a 
 The earlier Docker named-volume database was cleanly stopped, backed up, and migrated to the local bind mount. The original volume and timestamped backups were retained. Do not treat the old volume as the active data source after migration.
 
 ## Common problems
+
+For long narratives that hit the task limit, use Automatic/Narrative notes for safe preservation or configure a language provider to organize the prose. The action budget includes invoice/report steps. See [narrative intake](work-assistant.md#free-form-narrative-intake).
+
+For a proposed work allocation table, use Automatic processing and the documented **Period / Work description / Hours** columns. This local path does not need a provider connection. Review proposed/planned totals, confirm actual daily work, resolve billing questions, and enable invoice preparation separately. Saving drafts is possible with invoice preparation excluded. Future dates cannot be confirmed relative to the plan's reference date; resubmit work in a new plan after it has been performed.
+
+If an external provider returns HTTP 429, read the classification: quota/billing failures require account credits or a limit change; temporary throttling requires waiting or reducing request size/frequency. Unknown 429 errors remain explicitly ambiguous. Changing models or repeatedly retrying does not restore exhausted API credits. Provider error bodies are size/time bounded, and only recognized identifiers affect the public message.
 
 | Symptom                                 | Checks                                                                                                                                                                           |
 | --------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |

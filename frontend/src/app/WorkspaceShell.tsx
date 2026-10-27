@@ -13,6 +13,7 @@ import { DisputeDialog } from "@/features/invoices/DisputeDialog";
 import { EmailModal } from "@/features/invoices/EmailModal";
 import { ExpenseDialog } from "@/features/invoices/ExpenseDialog";
 import { InvoiceDraftDialog } from "@/features/invoices/InvoiceDraftDialog";
+import { InvoiceEditDialog } from "@/features/invoices/InvoiceEditDialog";
 import { InvoicesPage } from "@/features/invoices/InvoicesPage";
 import { SubmissionDialog } from "@/features/invoices/SubmissionDialog";
 import { WithdrawInvoiceDialog } from "@/features/invoices/WithdrawInvoiceDialog";
@@ -37,6 +38,8 @@ export function WorkspaceShell() {
     setData,
     page,
     setPage,
+    assistantPlanId,
+    setAssistantPlanId,
     month,
     setMonth,
     cid,
@@ -89,6 +92,7 @@ export function WorkspaceShell() {
                 onClick={() => {
                   setPage(name);
                   setSelected(undefined);
+                  setAssistantPlanId(undefined);
                 }}
               >
                 <Icon size={18} />
@@ -137,6 +141,7 @@ export function WorkspaceShell() {
                 {data.contracts.map((c) => (
                   <option key={c.id} value={c.id}>
                     {data.clients.find((cl) => cl.id === c.client_id)?.name} · {c.contractor}
+                    {c.archived ? " · Archived" : ""}
                   </option>
                 ))}
               </select>
@@ -200,6 +205,7 @@ export function WorkspaceShell() {
                 cid={cid}
                 onRefresh={refresh}
                 onInvoice={openInvoice}
+                initialPlanId={assistantPlanId}
               />
             )}
             {page === "Dashboard" && <DashboardPage />}
@@ -220,6 +226,7 @@ export function WorkspaceShell() {
         {modal === "timer" && <TimerDialog />}
         {modal.startsWith("week:") && <WeeklyReviewDialog />}
         {(modal === "invoice" || modal === "replacement") && <InvoiceDraftDialog />}
+        {modal === "edit-invoice" && <InvoiceEditDialog />}
         {modal.startsWith("expense:") && <ExpenseDialog />}
         {modal === "email" && selected && (
           <EmailModal id={selected.invoice.id} onClose={() => setModal("")} />
@@ -229,8 +236,10 @@ export function WorkspaceShell() {
         {modal === "dispute" && <DisputeDialog />}
         {(modal === "payment" || modal === "historical") && <PaymentDialog />}
         {(modal === "client" || modal.startsWith("client:")) && <ClientDialog />}
-        {modal === "project" && <ProjectDialog />}
-        {(modal === "contract" || modal === "new-contract") && <ContractDialog />}
+        {(modal === "project" || modal.startsWith("project:")) && <ProjectDialog />}
+        {(modal === "contract" || modal === "new-contract" || modal.startsWith("contract:")) && (
+          <ContractDialog />
+        )}
       </div>
     </BusyContext.Provider>
   );

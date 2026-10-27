@@ -6,6 +6,7 @@ import static io.consulting.domain.DomainValues.text;
 import io.consulting.service.assistant.AssistantRevisionService;
 import io.consulting.service.assistant.WorkAssistantService;
 import java.util.Map;
+import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
@@ -37,6 +38,20 @@ public class AssistantController {
         assistant.saveDraft(integer(request, "contract_id"), text(request, "source"));
     }
 
+    @GetMapping("/plans/{id}")
+    public Object plan(@PathVariable String id) {
+        return assistant.getPlan(id);
+    }
+
+    @DeleteMapping("/plans/{id}")
+    public void deleteConversation(
+        @PathVariable String id,
+        @RequestParam int version,
+        @RequestParam(defaultValue = "false") boolean confirmed
+    ) {
+        assistant.deleteConversation(id, version, confirmed);
+    }
+
     @PostMapping("/plan")
     public Object propose(@RequestBody Map<String, Object> request) {
         assistant.saveDraft(integer(request, "contract_id"), text(request, "source"));
@@ -51,6 +66,21 @@ public class AssistantController {
     @PostMapping("/plans/{id}/apply")
     public Object apply(@PathVariable String id, @RequestBody Map<String, Object> request) {
         return assistant.apply(id, request);
+    }
+
+    @PostMapping("/plans/{id}/split")
+    public Object split(@PathVariable String id, @RequestBody Map<String, Object> request) {
+        return assistant.split(id, integer(request, "version"), integer(request, "action_index"));
+    }
+
+    @PostMapping("/plans/{id}/invoice")
+    public Object invoice(@PathVariable String id, @RequestBody Map<String, Object> request) {
+        return assistant.invoiceDraft(
+            id,
+            integer(request, "version"),
+            text(request, "period_start"),
+            text(request, "period_end")
+        );
     }
 
     @PostMapping("/plans/{id}/revise")
